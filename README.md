@@ -1,114 +1,115 @@
-# LAPS-UI (PowerShell/WPF) — Client léger pour récupérer les mots de passe LAPS
+# LAPS-UI (PowerShell/WPF) — Lightweight client to retrieve LAPS passwords
 
-> **Pourquoi ?**  
-> Sous **Windows 11**, le petit client graphique « LAPS UI » historique n’est plus disponible officiellement.  
-> Ce projet propose une **alternative légère, locale et open-source** pour consulter les mots de passe **Windows LAPS** (nouvelle génération) et **Legacy LAPS** directement depuis un poste client, **sans module ActiveDirectory**.
+> **Why?**
+> On **Windows 11**, the small graphical client "LAPS UI" is no longer officially available.
+> This project offers a **lightweight, local and open-source alternative** to view **Windows LAPS** (new generation) and **Legacy LAPS** passwords directly from a workstation, **without the ActiveDirectory module**.
 
-![Aperçu de l’application](docs/screenshot.png)
-
----
-
-## 📦 Ce qui est fourni
-
-- **Script PowerShell (.ps1)** : disponible **dans le dépôt** (`LAPS-UI.ps1`).
-- **Binaire Windows (.exe)** : disponible **dans l’onglet _Releases_** de ce dépôt.
-
-> ℹ️ Le binaire `.exe` fourni dans les releases **n’est pas signé** (pas de code-signing).  
-> - Windows SmartScreen / certains EDR peuvent afficher un avertissement ou bloquer l’exécution.  
-> - Utilisez idéalement le **.ps1** (signé par vos soins) ou signez le `.exe` avant de le déployer en production.  
-> - Vérifiez toujours l’**empreinte SHA256** du fichier téléchargé (voir plus bas).
+![Application preview](docs/screenshot.png)
 
 ---
 
-## ✨ Fonctionnalités
+## 📦 Provided
 
-- 🔐 Lecture des attributs LAPS dans Active Directory via LDAP/LDAPS :
-  - **Windows LAPS** : `msLAPS-Password` (+ expiration)
-  - **Legacy LAPS** : `ms-Mcs-AdmPwd` (+ expiration)
-- 🖥️ UI moderne **WPF thème sombre** (Windows 10/11, DPI friendly).
-- 🔎 Recherche par **nom de PC** (CN / sAMAccountName / dNSHostName).
-- 🌐 **LDAP** par défaut ou **LDAPS (TLS 636)** via une case à cocher.
-- 👁️ **Afficher/Masquer** le mot de passe ; **Copier** avec **compte à rebours** (20 s) et purge automatique du presse-papiers.
-- 🧠 Option **« Mémoriser l’utilisateur »** (stocke *uniquement* le nom d’utilisateur dans `%LOCALAPPDATA%\LAPS-UI\prefs.json`).
-- ⚠️ **Aucune sauvegarde de mots de passe** sur disque. Pas de module AD requis.
+- **PowerShell script (.ps1)**: available **in the repository** (`LAPS-UI.ps1`).
+- **Windows binary (.exe)**: available **in the _Releases_ tab** of this repository.
+
+> ℹ️ The `.exe` binary provided in the releases **is not signed** (no code-signing).
+> - Windows SmartScreen / some EDRs may display a warning or block execution.
+> - Prefer the **.ps1** (signed by you) or sign the `.exe` before deploying in production.
+> - Always verify the file's **SHA256 hash** (see below).
 
 ---
 
-## ✅ Prérequis
+## ✨ Features
 
-- **Windows 10/11**  
-- **Windows PowerShell 5.1**  
-- **.NET Framework 4.7+**  
-- Accès réseau vers un **contrôleur de domaine** (LDAP 389 / LDAPS 636)  
-- **Droits de lecture LAPS** sur les objets **Computer** ciblés (ACL/GPO Microsoft LAPS)
+- 🔐 Read LAPS attributes in Active Directory via LDAP/LDAPS:
+  - **Windows LAPS**: `msLAPS-Password` (+ expiration)
+  - **Legacy LAPS**: `ms-Mcs-AdmPwd` (+ expiration)
+- 🖥️ Modern **dark WPF UI** (Windows 10/11, DPI friendly) with improved graphics.
+- 🔎 Search by **computer name** (CN / sAMAccountName / dNSHostName).
+- 🌐 **LDAP** by default or **LDAPS (TLS 636)** through a checkbox.
+- 👁️ **Show/Hide** the password; **Copy** with **countdown** (20 s) and automatic clipboard purge.
+- 💾 **"Remember user and domain"** option (saves ID and AD, encrypted in `%LOCALAPPDATA%\LAPS-UI\prefs.json`).
+- ⚠️ **No password storage** on disk. No AD module required.
 
 ---
 
-## 🔧 Installation & Lancement
+## ✅ Prerequisites
 
-### Option A — Script PowerShell (recommandée si SmartScreen/EDR strict)
-1. Récupérez `LAPS-UI.ps1` depuis le dépôt.
-2. (Optionnel) Débloquez le fichier si nécessaire :
+- **Windows 10/11**
+- **Windows PowerShell 5.1**
+- **.NET Framework 4.7+**
+- Network access to a **domain controller** (LDAP 389 / LDAPS 636)
+- **LAPS read rights** on the targeted **Computer** objects (ACL/GPO Microsoft LAPS)
+
+---
+
+## 🔧 Installation & Launch
+
+### Option A — PowerShell script (recommended if SmartScreen/EDR is strict)
+1. Get `LAPS-UI.ps1` from the repository.
+2. (Optional) Unblock the file if needed:
    ```powershell
    Unblock-File .\LAPS-UI.ps1
-3. Lancez en STA :
+   ```
+3. Run in STA:
    ```powershell
    powershell.exe -NoProfile -ExecutionPolicy Bypass -sta -File .\LAPS-UI.ps1
+   ```
 
-### Option B — Exécutable (.exe) depuis Releases
-
-1. Téléchargez la version souhaitée depuis l’onglet Releases.
-2. Vérifiez l’empreinte SHA256 (exemple) :
+### Option B — Executable (.exe) from Releases
+1. Download the desired version from the Releases tab.
+2. Verify the SHA256 hash (example):
    ```powershell
    Get-FileHash .\LAPS-UI.exe -Algorithm SHA256 | Select-Object Hash
-3. Exécutez LAPS-UI.exe.
-Si SmartScreen/EDR bloque : utilisez le .ps1, signez le binaire, ou faites approuver le binaire par vos politiques (AppLocker/WDAC/EDR).
+   ```
+3. Run LAPS-UI.exe.
+If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved by your policies (AppLocker/WDAC/EDR).
 
 ---
 
-## 🚀 Utilisation
+## 🚀 Usage
 
-1. Utilisateur / Mot de passe : entrez un compte disposant des droits de lecture LAPS
-(ou laissez vide pour tenter avec vos identifiants de session si votre ACL l’autorise).
-2. Contrôleur/Domaine : renseignez votre DC/nom de domaine.
-3. LDAPS : cochez si votre DC expose 636/TLS avec certificat valide (recommandé en prod).
-4. Nom de l’ordinateur : saisissez le PC cible (ex. PC-IT-1234).
-5. Cliquez Récupérer → affichage du type de LAPS, expiration, et (si autorisé) mot de passe.
-6. Copier : le mot de passe est copié et un compte à rebours de 20 s purge automatiquement le presse-papiers.
-
----
-
-## 🔒 Sécurité
-
-- Aucun mot de passe n’est écrit sur disque.
-- Le presse-papiers est purgé après 20 s (si son contenu est toujours le mot de passe copié).
-- La copie tente d’utiliser l’API WinRT (option `IsAllowedInHistory=false`) pour éviter l’historique Win+V.
-- Selon la configuration Windows/tenant, cette exclusion peut ne pas être honorée pour des apps non packagées.  
-  **Solutions 100 % efficaces** : désactiver l’historique du presse-papiers via GPO, ou packager en **MSIX** signé.
-- L’option « Mémoriser l’utilisateur » ne stocke que `UserName` et `RememberUser` dans `%LOCALAPPDATA%\LAPS-UI\prefs.json`.
+1. User / Password: enter an account with LAPS read rights (or leave blank to try with your session credentials if your ACL allows it).
+2. Controller/Domain: specify your DC/domain name.
+3. LDAPS: check if your DC exposes 636/TLS with a valid certificate (recommended in production).
+4. Computer name: enter the target PC (e.g. PC-IT-1234).
+5. Click Retrieve → type of LAPS, expiration, and (if authorized) password appear.
+6. Copy: the password is copied and a 20 s countdown automatically purges the clipboard.
 
 ---
 
-## 🧩 Dépannage (FAQ rapide)
+## 🔒 Security
 
-### Introuvable / pas d’attributs LAPS
-- Vérifiez l’orthographe, l’OU, et vos droits de lecture LAPS.
-- Essayez **CN**, **sAMAccountName** (`...$`) ou **dNSHostName**.
-
-### LDAPS échoue
-- Certificat serveur valide ? Port **636** ouvert ? **CN/SAN** du cert = nom du serveur ?
-- Testez d’abord en **LDAP signé** (case LDAPS décochée), puis repassez en **LDAPS**.
-
-### Le mot de passe apparaît dans Win+V
-- Possible si Windows ignore `IsAllowedInHistory` hors **MSIX**.  
-  → Désactiver l’historique via **GPO** ou packager en **MSIX** signé.
-
-### SmartScreen/EDR bloque l’EXE
-- Préférez le **PS1**, ou **signez** l’EXE et faites l’approuver via **AppLocker/WDAC/EDR**.
+- No password is written to disk.
+- The clipboard is purged after 20 s (if its content is still the copied password).
+- Copy attempts to use the WinRT API (`IsAllowedInHistory=false`) to avoid the Win+V history.
+- Depending on Windows/tenant settings, this exclusion may not be honored for non-packaged apps.  **100% effective solutions**: disable clipboard history via GPO, or package as a signed **MSIX**.
+- The "Remember user and domain" option stores the ID and AD values encrypted in `%LOCALAPPDATA%\LAPS-UI\prefs.json`.
 
 ---
 
-## 🧪 Compatibilité
+## 🧩 Troubleshooting (Quick FAQ)
+
+### Not found / no LAPS attributes
+- Check spelling, OU, and your LAPS read rights.
+- Try **CN**, **sAMAccountName** (`...$`) or **dNSHostName**.
+
+### LDAPS fails
+- Valid server certificate? Port **636** open? **CN/SAN** of the cert = server name?
+- Test first in **signed LDAP** (LDAPS box unchecked), then switch back to **LDAPS**.
+
+### Password appears in Win+V
+- Possible if Windows ignores `IsAllowedInHistory` outside **MSIX**.
+  → Disable history via **GPO** or package as a signed **MSIX**.
+
+### SmartScreen/EDR blocks the EXE
+- Prefer the **PS1**, or **sign** the EXE and have it approved via **AppLocker/WDAC/EDR**.
+
+---
+
+## 🧪 Compatibility
 
 - **Windows PowerShell 5.1**
-- Non prévu pour **PowerShell 7** (WPF/WinRT différent)
+- Not designed for **PowerShell 7** (WPF/WinRT differs)
+
