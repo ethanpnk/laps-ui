@@ -179,6 +179,18 @@ function Get-LapsPasswordFromEntry { param($Result)
       <Setter Property="BorderBrush" Value="#3E3E42"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="4">
+              <ScrollViewer x:Name="PART_ContentHost"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
     <Style TargetType="PasswordBox">
       <Setter Property="Background" Value="#2D2D2D"/>
@@ -186,6 +198,18 @@ function Get-LapsPasswordFromEntry { param($Result)
       <Setter Property="BorderBrush" Value="#3E3E42"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="PasswordBox">
+            <Border Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="4">
+              <ScrollViewer x:Name="PART_ContentHost"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
 
     <Style TargetType="GroupBox">
@@ -205,13 +229,41 @@ function Get-LapsPasswordFromEntry { param($Result)
               <Border.Effect>
                 <DropShadowEffect Color="#000000" BlurRadius="10" ShadowDepth="2" Opacity="0.4"/>
               </Border.Effect>
-              <DockPanel>
-                <TextBlock DockPanel.Dock="Top"
-                           Text="{TemplateBinding Header}" FontWeight="SemiBold"
-                           Foreground="#BEBEBE" Margin="4,0,0,8"/>
+              <DockPanel LastChildFill="True">
+                <Border DockPanel.Dock="Top" Background="#2B2B2B" Padding="8,4" CornerRadius="8,8,0,0">
+                  <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="#BEBEBE"/>
+                </Border>
                 <ContentPresenter Margin="{TemplateBinding Padding}"/>
               </DockPanel>
             </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="CheckBox">
+      <Setter Property="Foreground" Value="#E0E0E0"/>
+      <Setter Property="Margin" Value="0,4,0,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <StackPanel Orientation="Horizontal">
+              <Border x:Name="box" Width="16" Height="16" CornerRadius="3"
+                      Background="#2D2D2D" BorderBrush="#3E3E42" BorderThickness="1" Margin="0,0,8,0">
+                <Path x:Name="check" Data="M2,8 L6,12 L14,4" Stroke="White" StrokeThickness="2" Visibility="Collapsed"/>
+              </Border>
+              <ContentPresenter VerticalAlignment="Center"/>
+            </StackPanel>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="box" Property="Background" Value="#0A84FF"/>
+                <Setter TargetName="check" Property="Visibility" Value="Visible"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="box" Property="Opacity" Value="0.5"/>
+                <Setter Property="Foreground" Value="#888"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
       </Setter>
@@ -231,8 +283,8 @@ function Get-LapsPasswordFromEntry { param($Result)
         <ColumnDefinition Width="*"/>
       </Grid.ColumnDefinitions>
 
-      <!-- Authentification -->
-      <GroupBox Grid.Row="0" Grid.Column="0" Header="Authentification">
+      <!-- Credentials -->
+      <GroupBox Grid.Row="0" Grid.Column="0" Header="Credentials">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -252,7 +304,7 @@ function Get-LapsPasswordFromEntry { param($Result)
 
           <!-- New checkbox: remember user -->
           <CheckBox Grid.Row="2" Grid.Column="0" x:Name="cbRememberUser"
-                    Content="Remember user" Margin="0,8,0,0" Foreground="White"/>
+                    Content="Remember user" Margin="0,8,0,0"/>
         </Grid>
       </GroupBox>
 
@@ -271,9 +323,9 @@ function Get-LapsPasswordFromEntry { param($Result)
           <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
           <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Use LDAPS (TLS 636)"
-                     Margin="12,0,0,0" VerticalAlignment="Center" Foreground="White"/>
+                     Margin="12,0,0,0" VerticalAlignment="Center"/>
           <CheckBox  Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="cbRememberServer"
-                     Content="Remember controller/domain" Margin="0,8,0,0" Foreground="White"/>
+                     Content="Remember controller/domain" Margin="0,8,0,0"/>
         </Grid>
       </GroupBox>
 
@@ -319,7 +371,7 @@ function Get-LapsPasswordFromEntry { param($Result)
                        IsHitTestVisible="False" Focusable="False"/>
 
           <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show"
-                    Margin="12,6,12,0" VerticalAlignment="Center" Foreground="White"/>
+                    Margin="12,6,12,0" VerticalAlignment="Center"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copy"
                     Style="{StaticResource AccentButton}" IsEnabled="False"/>
 
