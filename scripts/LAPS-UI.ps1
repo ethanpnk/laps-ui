@@ -184,7 +184,7 @@ Start-Process -FilePath '$exe'
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="LAPS UI (Windows &amp; Legacy) - v1.0.3"
+        Title="LAPS UI (Windows &amp; Legacy) - v$CurrentVersion "
         Height="640" Width="1000" MinHeight="640" MinWidth="1000"
         WindowStartupLocation="CenterScreen"
         Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
