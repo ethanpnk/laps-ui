@@ -6,6 +6,7 @@
 # --- Config ---
 $UseLdaps = $false
 $ClipboardAutoClearSeconds = 20
+$CurrentVersion = '1.0.3'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
@@ -133,6 +134,51 @@ function Get-LapsPasswordFromEntry { param($Result)
     return [pscustomobject]@{ Type='Legacy LAPS'; Password=[string]$legacyPwd; Account=$null; Expires=$exp; DN=[string]$dn } }
 
   $null }
+
+# ---------- Update helpers ----------
+
+function Check-ForUpdates {
+  param([string]$CurrentVersion)
+  $uri = 'https://api.github.com/repos/ethanpnk/laps-ui/releases/latest'
+  try {
+    $release = Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'LAPS-UI' } -ErrorAction Stop
+  } catch {
+    Write-Verbose "Update check failed: $_"
+    return $null
+  }
+  $latest = $release.tag_name.TrimStart('v')
+  if ([version]$latest -le [version]$CurrentVersion) { return $null }
+  if ($script:Prefs.IgnoreVersion -eq $latest) { return $null }
+  $asset = $release.assets | Where-Object { $_.name -eq 'LAPS-UI.exe' } | Select-Object -First 1
+  if (-not $asset) { return $null }
+  $sha256 = $null
+  if ($release.body -match 'SHA256[:\s]+(?<hash>[A-Fa-f0-9]{64})') { $sha256 = $Matches['hash'] }
+  [pscustomobject]@{ Version=$latest; Url=$asset.browser_download_url; Sha256=$sha256 }
+}
+
+function Start-AppUpdate {
+  param($Info, $Window)
+  try {
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) "LAPS-UI-$($Info.Version).exe"
+    Invoke-WebRequest -Uri $Info.Url -OutFile $tmp -UseBasicParsing
+    if ($Info.Sha256) {
+      $h = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
+      if ($h -ne $Info.Sha256) { throw "SHA256 mismatch" }
+    }
+    $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $script = @"
+Start-Sleep -Seconds 1
+Copy-Item -Path '$tmp' -Destination '$exe' -Force
+Start-Process -FilePath '$exe'
+"@
+    $ps = Join-Path ([IO.Path]::GetTempPath()) 'laps-ui-update.ps1'
+    Set-Content -Path $ps -Value $script -Encoding UTF8
+    Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass','-File', $ps -Verb RunAs
+    $Window.Close()
+  } catch {
+    [System.Windows.MessageBox]::Show("Update failed: $($_.Exception.Message)", 'Update', 'OK', 'Error') | Out-Null
+  }
+}
 
 # ---------- XAML (Dark) ----------
 [xml]$xaml = @"
@@ -277,6 +323,7 @@ function Get-LapsPasswordFromEntry { param($Result)
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
       <!-- Top forms: credentials & AD target side by side -->
@@ -380,7 +427,12 @@ function Get-LapsPasswordFromEntry { param($Result)
         </Grid>
       </GroupBox>
 
-    </Grid>
+      <StackPanel Grid.Row="4" Orientation="Horizontal">
+        <Button x:Name="btnUpdate" Content="Update" Style="{StaticResource AccentButton}" Visibility="Collapsed"/>
+        <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
+      </StackPanel>
+
+      </Grid>
   </ScrollViewer>
 </Window>
 "@
@@ -404,6 +456,8 @@ $btnCopy        = $window.FindName("btnCopy")
 $lblCountdown   = $window.FindName("lblCountdown")
 $cbRememberUser = $window.FindName("cbRememberUser")
 $cbRememberServer = $window.FindName("cbRememberServer")
+$btnUpdate     = $window.FindName("btnUpdate")
+$btnIgnore     = $window.FindName("btnIgnore")
 
 # Init
 $cbLdaps.IsChecked = $UseLdaps
@@ -415,6 +469,7 @@ $script:DoneTimer = $null
 $PrefDir  = Join-Path $env:LOCALAPPDATA 'LAPS-UI'
 $PrefFile = Join-Path $PrefDir 'prefs.json'
 New-Item -Path $PrefDir -ItemType Directory -Force | Out-Null
+$script:Prefs = @{}
 
 function Protect-String {
   param([string]$Text)
@@ -435,27 +490,30 @@ function Unprotect-String {
 }
 
 function Save-Prefs {
-  $pref = @{
-    RememberUser = [bool]$cbRememberUser.IsChecked
-    UserName     = $(if ($cbRememberUser.IsChecked) { Protect-String $tbUser.Text } else { $null })
+  $script:Prefs = @{
+    RememberUser  = [bool]$cbRememberUser.IsChecked
+    UserName      = $(if ($cbRememberUser.IsChecked) { Protect-String $tbUser.Text } else { $null })
     RememberServer = [bool]$cbRememberServer.IsChecked
-    ServerName     = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
+    ServerName      = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
+    IgnoreVersion   = $script:Prefs.IgnoreVersion
   }
-  ($pref | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
+  ($script:Prefs | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
 }
+
 function Load-Prefs {
+  $script:Prefs = @{}
   if (Test-Path $PrefFile) {
     try {
-      $p = Get-Content $PrefFile -Raw | ConvertFrom-Json
-      if ($p.RememberUser) {
+      $script:Prefs = Get-Content $PrefFile -Raw | ConvertFrom-Json
+      if ($script:Prefs.RememberUser) {
         $cbRememberUser.IsChecked = $true
-        if ($p.UserName) { $tbUser.Text = Unprotect-String $p.UserName }
+        if ($script:Prefs.UserName) { $tbUser.Text = Unprotect-String $script:Prefs.UserName }
       }
-      if ($p.RememberServer) {
+      if ($script:Prefs.RememberServer) {
         $cbRememberServer.IsChecked = $true
-        if ($p.ServerName) { $tbServer.Text = Unprotect-String $p.ServerName }
+        if ($script:Prefs.ServerName) { $tbServer.Text = Unprotect-String $script:Prefs.ServerName }
       }
-    } catch {}
+    } catch { $script:Prefs = @{} }
   }
 }
 Load-Prefs
@@ -469,6 +527,20 @@ $window.Add_Closed({ Save-Prefs })
 
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true  })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false })
+
+$updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
+if ($updateInfo) {
+  $btnUpdate.Content = "Update to v$($updateInfo.Version)"
+  $btnUpdate.Visibility = 'Visible'
+  $btnIgnore.Visibility = 'Visible'
+  $btnUpdate.Add_Click({ Start-AppUpdate -Info $updateInfo -Window $window })
+  $btnIgnore.Add_Click({
+    $script:Prefs.IgnoreVersion = $updateInfo.Version
+    Save-Prefs
+    $btnUpdate.Visibility = 'Collapsed'
+    $btnIgnore.Visibility = 'Collapsed'
+  })
+}
 
 # Show/Hide output
 $cbShow.Add_Checked({
