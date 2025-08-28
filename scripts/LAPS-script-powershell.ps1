@@ -348,17 +348,35 @@ $script:UseLdaps   = [bool]$cbLdaps.IsChecked
 $script:CurrentLapsPassword = ""
 $script:DoneTimer = $null
 
-# --- Préférences (seulement l'utilisateur et le contrôleur, jamais le mot de passe) ---
+# --- Préférences (seulement l'utilisateur et le contrôleur, jamais le mot de passe; valeurs chiffrées DPAPI) ---
 $PrefDir  = Join-Path $env:LOCALAPPDATA 'LAPS-UI'
 $PrefFile = Join-Path $PrefDir 'prefs.json'
 New-Item -Path $PrefDir -ItemType Directory -Force | Out-Null
 
+function Protect-String {
+  param([string]$Text)
+  if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+  $sec = ConvertTo-SecureString $Text -AsPlainText -Force
+  ConvertFrom-SecureString $sec
+}
+
+function Unprotect-String {
+  param([string]$Cipher)
+  if ([string]::IsNullOrWhiteSpace($Cipher)) { return $null }
+  try {
+    $sec = ConvertTo-SecureString $Cipher
+    [Runtime.InteropServices.Marshal]::PtrToStringUni(
+      [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+    )
+  } catch { $Cipher }
+}
+
 function Save-Prefs {
   $pref = @{
     RememberUser = [bool]$cbRememberUser.IsChecked
-    UserName     = $(if ($cbRememberUser.IsChecked) { $tbUser.Text } else { $null })
+    UserName     = $(if ($cbRememberUser.IsChecked) { Protect-String $tbUser.Text } else { $null })
     RememberServer = [bool]$cbRememberServer.IsChecked
-    ServerName     = $(if ($cbRememberServer.IsChecked) { $tbServer.Text } else { $null })
+    ServerName     = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
   }
   ($pref | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
 }
@@ -368,11 +386,11 @@ function Load-Prefs {
       $p = Get-Content $PrefFile -Raw | ConvertFrom-Json
       if ($p.RememberUser) {
         $cbRememberUser.IsChecked = $true
-        if ($p.UserName) { $tbUser.Text = $p.UserName }
+        if ($p.UserName) { $tbUser.Text = Unprotect-String $p.UserName }
       }
       if ($p.RememberServer) {
         $cbRememberServer.IsChecked = $true
-        if ($p.ServerName) { $tbServer.Text = $p.ServerName }
+        if ($p.ServerName) { $tbServer.Text = Unprotect-String $p.ServerName }
       }
     } catch {}
   }
