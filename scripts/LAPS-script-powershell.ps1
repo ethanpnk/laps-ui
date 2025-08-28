@@ -1,7 +1,7 @@
 ﻿# LAPS-UI.ps1 — WPF Dark, PS 5.1 (STA)
 # LDAP par défaut, LDAPS optionnel, UI sombre moderne, countdown 20s
 # Champ "Mot de passe LAPS" non-éditable + message vert fiable en fin de compte à rebours
-# + Case "Mémoriser l’utilisateur" (persistance locale %LOCALAPPDATA%\LAPS-UI\prefs.json)
+# + Cases "Mémoriser l’utilisateur" et "Mémoriser le contrôleur/domaine" (persistance locale %LOCALAPPDATA%\LAPS-UI\prefs.json)
 
 # --- Config ---
 $UseLdaps = $false
@@ -253,10 +253,16 @@ function Get-LapsPasswordFromEntry { param($Result)
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Contrôleur/Domaine" Margin="0,0,12,0" Foreground="#BEBEBE"/>
-          <TextBox   Grid.Column="1" x:Name="tbServer" Text=""/>
-          <CheckBox  Grid.Column="2" x:Name="cbLdaps" Content="Utiliser LDAPS (TLS 636)"
+          <Grid.RowDefinitions>
+            <RowDefinition/>
+            <RowDefinition/>
+          </Grid.RowDefinitions>
+          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Contrôleur/Domaine" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+          <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
+          <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Utiliser LDAPS (TLS 636)"
                      Margin="12,0,0,0" VerticalAlignment="Center" Foreground="White"/>
+          <CheckBox  Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="cbRememberServer"
+                     Content="Mémoriser le contrôleur/domaine" Margin="0,8,0,0" Foreground="White"/>
         </Grid>
       </GroupBox>
 
@@ -334,6 +340,7 @@ $cbShow         = $window.FindName("cbShow")
 $btnCopy        = $window.FindName("btnCopy")
 $lblCountdown   = $window.FindName("lblCountdown")
 $cbRememberUser = $window.FindName("cbRememberUser")
+$cbRememberServer = $window.FindName("cbRememberServer")
 
 # Init
 $cbLdaps.IsChecked = $UseLdaps
@@ -341,7 +348,7 @@ $script:UseLdaps   = [bool]$cbLdaps.IsChecked
 $script:CurrentLapsPassword = ""
 $script:DoneTimer = $null
 
-# --- Préférences (seulement l'utilisateur, jamais le mot de passe) ---
+# --- Préférences (seulement l'utilisateur et le contrôleur, jamais le mot de passe) ---
 $PrefDir  = Join-Path $env:LOCALAPPDATA 'LAPS-UI'
 $PrefFile = Join-Path $PrefDir 'prefs.json'
 New-Item -Path $PrefDir -ItemType Directory -Force | Out-Null
@@ -350,6 +357,8 @@ function Save-Prefs {
   $pref = @{
     RememberUser = [bool]$cbRememberUser.IsChecked
     UserName     = $(if ($cbRememberUser.IsChecked) { $tbUser.Text } else { $null })
+    RememberServer = [bool]$cbRememberServer.IsChecked
+    ServerName     = $(if ($cbRememberServer.IsChecked) { $tbServer.Text } else { $null })
   }
   ($pref | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
 }
@@ -361,6 +370,10 @@ function Load-Prefs {
         $cbRememberUser.IsChecked = $true
         if ($p.UserName) { $tbUser.Text = $p.UserName }
       }
+      if ($p.RememberServer) {
+        $cbRememberServer.IsChecked = $true
+        if ($p.ServerName) { $tbServer.Text = $p.ServerName }
+      }
     } catch {}
   }
 }
@@ -368,6 +381,9 @@ Load-Prefs
 $cbRememberUser.Add_Checked({ Save-Prefs })
 $cbRememberUser.Add_Unchecked({ Save-Prefs })
 $tbUser.Add_LostFocus({ if ($cbRememberUser.IsChecked) { Save-Prefs } })
+$cbRememberServer.Add_Checked({ Save-Prefs })
+$cbRememberServer.Add_Unchecked({ Save-Prefs })
+$tbServer.Add_LostFocus({ if ($cbRememberServer.IsChecked) { Save-Prefs } })
 $window.Add_Closed({ Save-Prefs })
 
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true  })
@@ -477,7 +493,7 @@ $btnGet.Add_Click({
       }
       $secure = ConvertTo-SecureString -String $pbPass.Password -AsPlainText -Force
       $cred = New-Object System.Management.Automation.PSCredential ($tbUser.Text, $secure)
-      if ($cbRememberUser.IsChecked) { Save-Prefs } # au cas où l'utilisateur change maintenant
+      if ($cbRememberUser.IsChecked -or $cbRememberServer.IsChecked) { Save-Prefs } # au cas où l'utilisateur ou le serveur change maintenant
     }
 
     $ds  = Get-DirectorySearcher -Credential $cred -ServerOrDomain $tbServer.Text
