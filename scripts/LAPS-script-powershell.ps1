@@ -1,7 +1,7 @@
-﻿# LAPS-UI.ps1 — WPF Dark, PS 5.1 (STA)
-# LDAP par défaut, LDAPS optionnel, UI sombre moderne, countdown 20s
-# Champ "Mot de passe LAPS" non-éditable + message vert fiable en fin de compte à rebours
-# + Cases "Mémoriser l’utilisateur" et "Mémoriser le contrôleur/domaine" (persistance locale %LOCALAPPDATA%\LAPS-UI\prefs.json)
+﻿# LAPS-UI.ps1 - WPF Dark, PS 5.1 (STA)
+# LDAP by default, optional LDAPS, modern dark UI, 20s countdown
+# "LAPS password" field is read-only + reliable green message at the end of the countdown
+# + Checkboxes "Remember user" and "Remember controller/domain" (local persistence %LOCALAPPDATA%\LAPS-UI\prefs.json)
 
 # --- Config ---
 $UseLdaps = $false
@@ -67,10 +67,10 @@ function Get-DirectorySearcher {
   $rootPath = if ($ServerOrDomain) { if ($useLdapsNow) { "LDAP://$ServerOrDomain:636/RootDSE" } else { "LDAP://$ServerOrDomain/RootDSE" } } else { "LDAP://RootDSE" }
   $root = New-DirectoryEntry -Path $rootPath -Credential $Credential -Auth ($(if ($useLdapsNow){$authLdaps}else{$authBase}))
   try { [void]$root.RefreshCache() } catch {
-    throw "Échec du bind AD (RootDSE) sur '$rootPath' : $($_.Exception.Message)`n- Si LDAPS est coché, vérifie le cert/port 636, ou décoche pour tester en LDAP signé." }
+    throw "Failed to bind to AD (RootDSE) on '$rootPath': $($_.Exception.Message)`n- If LDAPS is checked, verify the cert/port 636, or uncheck to test in signed LDAP." }
 
   $defaultNC = Get-FirstValue $root.Properties["defaultNamingContext"]
-  if ([string]::IsNullOrWhiteSpace($defaultNC)) { throw "Impossible de déterminer le 'defaultNamingContext' via RootDSE." }
+  if ([string]::IsNullOrWhiteSpace($defaultNC)) { throw "Unable to determine the 'defaultNamingContext' via RootDSE." }
 
   $searchRootPath = if ($ServerOrDomain) { if ($useLdapsNow) { "LDAP://$ServerOrDomain:636/$defaultNC" } else { "LDAP://$ServerOrDomain/$defaultNC" } } else { "LDAP://$defaultNC" }
   $searchRoot = New-DirectoryEntry -Path $searchRootPath -Credential $Credential -Auth ($(if ($useLdapsNow){$authLdaps}else{$authBase}))
@@ -96,7 +96,7 @@ function Normalize-ComputerName { param([string]$InputName)
 function Find-ComputerEntry { param([System.DirectoryServices.DirectorySearcher]$Searcher,[string]$ComputerName)
   $raw = if ($ComputerName) { $ComputerName } else { "" }
   $name = Normalize-ComputerName -InputName $raw
-  if ([string]::IsNullOrWhiteSpace($name)) { throw "Veuillez entrer un nom d'ordinateur." }
+  if ([string]::IsNullOrWhiteSpace($name)) { throw "Please enter a computer name." }
   $v = Escape-LdapFilterValue $name
   $Searcher.Filter = "(&(objectCategory=computer)(|(sAMAccountName=$v$)(cn=$v)(dNSHostName=$v)))"
   $Searcher.FindOne() }
@@ -230,23 +230,23 @@ function Get-LapsPasswordFromEntry { param($Result)
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/> <!-- ligne pour la case à cocher -->
+            <RowDefinition Height="Auto"/> <!-- row for the checkbox -->
           </Grid.RowDefinitions>
 
-          <TextBlock Grid.Row="0" Grid.Column="0" Text="Utilisateur (user@domaine)" Margin="0,0,0,6" Foreground="#BEBEBE"/>
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,0,6" Foreground="#BEBEBE"/>
           <TextBox   Grid.Row="1" Grid.Column="0" x:Name="tbUser"/>
 
-          <TextBlock  Grid.Row="0" Grid.Column="1" Text="Mot de passe" Margin="12,0,0,6" Foreground="#BEBEBE"/>
+          <TextBlock  Grid.Row="0" Grid.Column="1" Text="Password" Margin="12,0,0,6" Foreground="#BEBEBE"/>
           <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="12,0,0,0"/>
 
-          <!-- Nouvelle case : mémoriser l’utilisateur -->
+          <!-- New checkbox: remember user -->
           <CheckBox Grid.Row="2" Grid.Column="0" x:Name="cbRememberUser"
-                    Content="Mémoriser l’utilisateur" Margin="0,8,0,0" Foreground="White"/>
+                    Content="Remember user" Margin="0,8,0,0" Foreground="White"/>
         </Grid>
       </GroupBox>
 
-      <!-- Cible AD -->
-      <GroupBox Header="Cible Active Directory">
+      <!-- AD Target -->
+      <GroupBox Header="Active Directory Target">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -257,38 +257,38 @@ function Get-LapsPasswordFromEntry { param($Result)
             <RowDefinition/>
             <RowDefinition/>
           </Grid.RowDefinitions>
-          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Contrôleur/Domaine" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
-          <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Utiliser LDAPS (TLS 636)"
+          <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Use LDAPS (TLS 636)"
                      Margin="12,0,0,0" VerticalAlignment="Center" Foreground="White"/>
           <CheckBox  Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="cbRememberServer"
-                     Content="Mémoriser le contrôleur/domaine" Margin="0,8,0,0" Foreground="White"/>
+                     Content="Remember controller/domain" Margin="0,8,0,0" Foreground="White"/>
         </Grid>
       </GroupBox>
 
-      <!-- Recherche -->
-      <GroupBox Header="Recherche">
+      <!-- Search -->
+      <GroupBox Header="Search">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Nom de l'ordinateur" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+          <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
           <TextBox   Grid.Column="1" x:Name="tbComp"/>
-          <Button    Grid.Column="2" x:Name="btnGet" Content="Récupérer" Style="{StaticResource AccentButton}"
+          <Button    Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}"
                      IsDefault="True" Margin="12,0,0,0"/>
         </Grid>
       </GroupBox>
 
-      <!-- Détails -->
-      <GroupBox Header="Détails">
+      <!-- Details -->
+      <GroupBox Header="Details">
         <TextBox x:Name="txtDetails" Height="80" AcceptsReturn="True" IsReadOnly="True"
                  VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
       </GroupBox>
 
-      <!-- Mot de passe -->
-      <GroupBox Header="Mot de passe LAPS">
+      <!-- Password -->
+      <GroupBox Header="LAPS Password">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -307,9 +307,9 @@ function Get-LapsPasswordFromEntry { param($Result)
                        FontFamily="Consolas" FontSize="20"
                        IsHitTestVisible="False" Focusable="False"/>
 
-          <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Afficher"
+          <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show"
                     Margin="12,6,12,0" VerticalAlignment="Center" Foreground="White"/>
-          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copier"
+          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copy"
                     Style="{StaticResource AccentButton}" IsEnabled="False"/>
 
           <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblCountdown"
@@ -348,7 +348,7 @@ $script:UseLdaps   = [bool]$cbLdaps.IsChecked
 $script:CurrentLapsPassword = ""
 $script:DoneTimer = $null
 
-# --- Préférences (seulement l'utilisateur et le contrôleur, jamais le mot de passe; valeurs chiffrées DPAPI) ---
+# --- Preferences (only the user and the controller, never the password; DPAPI-encrypted values) ---
 $PrefDir  = Join-Path $env:LOCALAPPDATA 'LAPS-UI'
 $PrefFile = Join-Path $PrefDir 'prefs.json'
 New-Item -Path $PrefDir -ItemType Directory -Force | Out-Null
@@ -426,7 +426,7 @@ $timer.Interval = [TimeSpan]::FromSeconds(1)
 $timer.Add_Tick({
   if ($script:CountdownRemaining -gt 0) {
     $script:CountdownRemaining--
-    $lblCountdown.Text = "Presse-papiers effacé dans $($script:CountdownRemaining)s"
+    $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
     if ($script:CountdownRemaining -le 0) {
       try {
         if ([System.Windows.Clipboard]::ContainsText()) {
@@ -437,7 +437,7 @@ $timer.Add_Tick({
         }
       } catch {}
       $timer.Stop()
-      $lblCountdown.Text = "Presse-papiers effacé"
+      $lblCountdown.Text = "Clipboard cleared"
       $lblCountdown.Foreground = 'LimeGreen'
       $script:DoneTimer = New-Object System.Windows.Threading.DispatcherTimer
       $script:DoneTimer.Interval = [TimeSpan]::FromSeconds(2)
@@ -455,7 +455,7 @@ $timer.Add_Tick({
   }
 })
 
-# COPY (best-effort sans Win+V)
+# COPY (best effort without Win+V)
 $btnCopy.Add_Click({
   if ([string]::IsNullOrWhiteSpace($script:CurrentLapsPassword)) { return }
 
@@ -488,17 +488,17 @@ $btnCopy.Add_Click({
   }
 
   [System.Windows.MessageBox]::Show(
-    ("Mot de passe copié {0} l'historique." -f ($(if($usedWinRT){'sans entrer dans'}else{'dans'}))),
-    "Copié",'OK','Information') | Out-Null
+    ("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
+    "Copied",'OK','Information') | Out-Null
 
   $script:CountdownRemaining = $ClipboardAutoClearSeconds
-  $lblCountdown.Text = "Presse-papiers effacé dans $($script:CountdownRemaining)s"
+  $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
   $lblCountdown.Foreground = '#FFA07A'
   $lblCountdown.Visibility = 'Visible'
   $timer.Stop(); $timer.Start()
 })
 
-# Récupérer
+# Retrieve
 $btnGet.Add_Click({
   try {
     $btnGet.IsEnabled = $false
@@ -507,16 +507,16 @@ $btnGet.Add_Click({
     $cred = $null
     if (-not [string]::IsNullOrWhiteSpace($tbUser.Text)) {
       if ([string]::IsNullOrWhiteSpace($pbPass.Password)) {
-        throw "Vous avez saisi un identifiant sans mot de passe."
+        throw "You entered a username without a password."
       }
       $secure = ConvertTo-SecureString -String $pbPass.Password -AsPlainText -Force
       $cred = New-Object System.Management.Automation.PSCredential ($tbUser.Text, $secure)
-      if ($cbRememberUser.IsChecked -or $cbRememberServer.IsChecked) { Save-Prefs } # au cas où l'utilisateur ou le serveur change maintenant
+      if ($cbRememberUser.IsChecked -or $cbRememberServer.IsChecked) { Save-Prefs } # in case the user or server changes now
     }
 
     $ds  = Get-DirectorySearcher -Credential $cred -ServerOrDomain $tbServer.Text
     $res = Find-ComputerEntry -Searcher $ds -ComputerName $tbComp.Text
-    if (-not $res) { throw "Ordinateur introuvable dans l'AD (vérifiez l'orthographe ou l'OU)." }
+    if (-not $res) { throw "Computer not found in AD (check spelling or OU)." }
 
     $item = Get-LapsPasswordFromEntry -Result $res
     if ($item -and $item.Password) {
@@ -533,21 +533,21 @@ $btnGet.Add_Click({
       $txtDetails.Text = ($lines -join [Environment]::NewLine)
     } else {
       $dn = Get-FirstValue (Get-PropValueCI $res.Properties 'distinguishedName')
-      $txtDetails.Text = "Aucun attribut LAPS lisible sur cet ordinateur.`r`nDN : $dn`r`n- LAPS non appliqué`r`n- Pas de droit de lecture`r`n- Rotation pas encore effectuée."
+      $txtDetails.Text = "No readable LAPS attribute on this computer.`r`nDN: $dn`r`n- LAPS not applied`r`n- No read permission`r`n- Rotation not yet performed."
       $script:CurrentLapsPassword = ""
       $pbPwdOut.Password = ""
       $txtPwdOut.Text = ""
       $btnCopy.IsEnabled = $false
     }
   } catch {
-    $txtDetails.Text = "Erreur : $($_.Exception.Message)"
+    $txtDetails.Text = "Error: $($_.Exception.Message)"
   } finally {
     $window.Cursor = 'Arrow'
     $btnGet.IsEnabled = $true
   }
 })
 
-# Enter -> Récupérer
+# Enter -> Retrieve
 $tbComp.Add_KeyDown({ if ($_.Key -eq 'Return') { $btnGet.RaiseEvent((New-Object System.Windows.RoutedEventArgs([Windows.Controls.Button]::ClickEvent))) } })
 
 [void]$window.ShowDialog()
