@@ -1,4 +1,4 @@
-# LAPS-UI (PowerShell/WPF) — Lightweight client to retrieve LAPS passwords
+# LAPS-UI (PowerShell/WPF) - Lightweight client to retrieve LAPS passwords
 
 > **Why?**
 > On **Windows 11**, the small graphical client "LAPS UI" is no longer officially available.
