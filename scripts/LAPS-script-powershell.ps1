@@ -139,7 +139,7 @@ function Get-LapsPasswordFromEntry { param($Result)
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="LAPS UI (Windows &amp; Legacy) - v1.0.2"
-        Height="695" Width="900" MinHeight="660" MinWidth="900"
+        Height="695" Width="1000" MinHeight="660" MinWidth="1000"
         WindowStartupLocation="CenterScreen"
         Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
   <Window.Resources>
@@ -277,17 +277,14 @@ function Get-LapsPasswordFromEntry { param($Result)
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
 
       <!-- Credentials -->
-      <GroupBox Grid.Row="0" Grid.Column="0" Header="Credentials">
+      <GroupBox Grid.Row="0" Header="Credentials">
         <Grid>
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
@@ -296,20 +293,20 @@ function Get-LapsPasswordFromEntry { param($Result)
             <RowDefinition Height="Auto"/> <!-- row for the checkbox -->
           </Grid.RowDefinitions>
 
-          <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,0,6" Foreground="#BEBEBE"/>
-          <TextBox   Grid.Row="1" Grid.Column="0" x:Name="tbUser"/>
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+          <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbUser"/>
 
-          <TextBlock  Grid.Row="0" Grid.Column="1" Text="Password" Margin="12,0,0,6" Foreground="#BEBEBE"/>
-          <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="12,0,0,0"/>
+          <TextBlock  Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+          <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="0,8,0,0"/>
 
           <!-- New checkbox: remember user -->
-          <CheckBox Grid.Row="2" Grid.Column="0" x:Name="cbRememberUser"
+          <CheckBox Grid.Row="2" Grid.Column="1" x:Name="cbRememberUser"
                     Content="Remember user" Margin="0,8,0,0"/>
         </Grid>
       </GroupBox>
 
       <!-- AD Target -->
-      <GroupBox Grid.Row="0" Grid.Column="1" Header="Active Directory Target">
+      <GroupBox Grid.Row="1" Header="Active Directory Target">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -330,7 +327,7 @@ function Get-LapsPasswordFromEntry { param($Result)
       </GroupBox>
 
       <!-- Search -->
-      <GroupBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Header="Search">
+      <GroupBox Grid.Row="2" Header="Search">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -345,13 +342,13 @@ function Get-LapsPasswordFromEntry { param($Result)
       </GroupBox>
 
       <!-- Details -->
-      <GroupBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Header="Details">
+      <GroupBox Grid.Row="3" Header="Details">
         <TextBox x:Name="txtDetails" Height="80" AcceptsReturn="True" IsReadOnly="True"
                  VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
       </GroupBox>
 
       <!-- Password -->
-      <GroupBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Header="LAPS Password">
+      <GroupBox Grid.Row="4" Header="LAPS Password">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
