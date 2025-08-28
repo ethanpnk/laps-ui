@@ -25,11 +25,11 @@
 - 🔐 Read LAPS attributes in Active Directory via LDAP/LDAPS:
   - **Windows LAPS**: `msLAPS-Password` (+ expiration)
   - **Legacy LAPS**: `ms-Mcs-AdmPwd` (+ expiration)
-- 🖥️ Modern **dark WPF UI** (Windows 10/11, DPI friendly).
+- 🖥️ Modern **dark WPF UI** (Windows 10/11, DPI friendly) with improved graphics.
 - 🔎 Search by **computer name** (CN / sAMAccountName / dNSHostName).
 - 🌐 **LDAP** by default or **LDAPS (TLS 636)** through a checkbox.
 - 👁️ **Show/Hide** the password; **Copy** with **countdown** (20 s) and automatic clipboard purge.
-- 🧠 **“Remember user”** option (stores *only* the user name in `%LOCALAPPDATA%\LAPS-UI\prefs.json`).
+- 💾 **"Remember user and domain"** option (saves ID and AD, encrypted in `%LOCALAPPDATA%\LAPS-UI\prefs.json`).
 - ⚠️ **No password storage** on disk. No AD module required.
 
 ---
@@ -85,7 +85,7 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 - The clipboard is purged after 20 s (if its content is still the copied password).
 - Copy attempts to use the WinRT API (`IsAllowedInHistory=false`) to avoid the Win+V history.
 - Depending on Windows/tenant settings, this exclusion may not be honored for non-packaged apps.  **100% effective solutions**: disable clipboard history via GPO, or package as a signed **MSIX**.
-- The "Remember user" option only stores `UserName` and `RememberUser` in `%LOCALAPPDATA%\LAPS-UI\prefs.json`.
+- The "Remember user and domain" option stores the ID and AD values encrypted in `%LOCALAPPDATA%\LAPS-UI\prefs.json`.
 
 ---
 
