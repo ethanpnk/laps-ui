@@ -197,20 +197,21 @@ function Get-LapsPasswordFromEntry { param($Result)
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="{x:Type GroupBox}">
-            <Grid>
-              <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-              </Grid.RowDefinitions>
-              <Border Grid.Row="0" Background="#1E1E1E" Padding="4,0" Margin="12,0,0,0">
-                <TextBlock Text="{TemplateBinding Header}" Foreground="#BEBEBE" FontWeight="SemiBold"/>
-              </Border>
-              <Border Grid.Row="1"
-                      BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                      CornerRadius="6" Background="#252526" Margin="0,8,0,0">
+            <Border CornerRadius="8"
+                    Background="#252526"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    Margin="0,8,0,0">
+              <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="10" ShadowDepth="2" Opacity="0.4"/>
+              </Border.Effect>
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top"
+                           Text="{TemplateBinding Header}" FontWeight="SemiBold"
+                           Foreground="#BEBEBE" Margin="4,0,0,8"/>
                 <ContentPresenter Margin="{TemplateBinding Padding}"/>
-              </Border>
-            </Grid>
+              </DockPanel>
+            </Border>
           </ControlTemplate>
         </Setter.Value>
       </Setter>
@@ -218,10 +219,20 @@ function Get-LapsPasswordFromEntry { param($Result)
   </Window.Resources>
 
   <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <StackPanel Margin="16" Orientation="Vertical">
+    <Grid Margin="16">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
 
       <!-- Authentification -->
-      <GroupBox Header="Authentification">
+      <GroupBox Grid.Row="0" Grid.Column="0" Header="Authentification">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -246,7 +257,7 @@ function Get-LapsPasswordFromEntry { param($Result)
       </GroupBox>
 
       <!-- AD Target -->
-      <GroupBox Header="Active Directory Target">
+      <GroupBox Grid.Row="0" Grid.Column="1" Header="Active Directory Target">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -267,7 +278,7 @@ function Get-LapsPasswordFromEntry { param($Result)
       </GroupBox>
 
       <!-- Search -->
-      <GroupBox Header="Search">
+      <GroupBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Header="Search">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -282,13 +293,13 @@ function Get-LapsPasswordFromEntry { param($Result)
       </GroupBox>
 
       <!-- Details -->
-      <GroupBox Header="Details">
+      <GroupBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Header="Details">
         <TextBox x:Name="txtDetails" Height="80" AcceptsReturn="True" IsReadOnly="True"
                  VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
       </GroupBox>
 
       <!-- Password -->
-      <GroupBox Header="LAPS Password">
+      <GroupBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Header="LAPS Password">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -317,7 +328,7 @@ function Get-LapsPasswordFromEntry { param($Result)
         </Grid>
       </GroupBox>
 
-    </StackPanel>
+    </Grid>
   </ScrollViewer>
 </Window>
 "@
