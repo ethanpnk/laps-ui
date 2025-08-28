@@ -277,57 +277,60 @@ function Get-LapsPasswordFromEntry { param($Result)
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
-      <!-- Credentials -->
-      <GroupBox Grid.Row="0" Header="Credentials">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-          </Grid.ColumnDefinitions>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/> <!-- row for the checkbox -->
-          </Grid.RowDefinitions>
+      <!-- Top forms: credentials & AD target side by side -->
+      <Grid Grid.Row="0" Margin="0,0,0,14">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-          <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
-          <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbUser"/>
+        <!-- Credentials -->
+        <GroupBox Grid.Column="0" Header="Credentials" Margin="0,0,8,14">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-          <TextBlock  Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
-          <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="0,8,0,0"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbUser"/>
 
-          <!-- New checkbox: remember user -->
-          <CheckBox Grid.Row="2" Grid.Column="1" x:Name="cbRememberUser"
-                    Content="Remember user" Margin="0,8,0,0"/>
-        </Grid>
-      </GroupBox>
+            <TextBlock  Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="0,8,0,0"/>
 
-      <!-- AD Target -->
-      <GroupBox Grid.Row="1" Header="Active Directory Target">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-          <Grid.RowDefinitions>
-            <RowDefinition/>
-            <RowDefinition/>
-          </Grid.RowDefinitions>
-          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
-          <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
-          <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Use LDAPS (TLS 636)"
-                     Margin="12,0,0,0" VerticalAlignment="Center"/>
-          <CheckBox  Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="cbRememberServer"
-                     Content="Remember controller/domain" Margin="0,8,0,0"/>
-        </Grid>
-      </GroupBox>
+            <CheckBox Grid.Row="2" Grid.Column="1" x:Name="cbRememberUser" Content="Remember user" Margin="0,8,0,0"/>
+          </Grid>
+        </GroupBox>
+
+        <!-- AD Target -->
+        <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,14">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+            <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
+            <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="12,0,0,0" VerticalAlignment="Center"/>
+            <CheckBox  Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="cbRememberServer" Content="Remember controller/domain" Margin="0,8,0,0"/>
+          </Grid>
+        </GroupBox>
+      </Grid>
 
       <!-- Search -->
-      <GroupBox Grid.Row="2" Header="Search">
+      <GroupBox Grid.Row="1" Header="Search">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -342,13 +345,13 @@ function Get-LapsPasswordFromEntry { param($Result)
       </GroupBox>
 
       <!-- Details -->
-      <GroupBox Grid.Row="3" Header="Details">
+      <GroupBox Grid.Row="2" Header="Details">
         <TextBox x:Name="txtDetails" Height="80" AcceptsReturn="True" IsReadOnly="True"
                  VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
       </GroupBox>
 
       <!-- Password -->
-      <GroupBox Grid.Row="4" Header="LAPS Password">
+      <GroupBox Grid.Row="3" Header="LAPS Password">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
