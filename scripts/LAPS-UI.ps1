@@ -107,7 +107,7 @@ function Update-ComputerSuggestions {
   param([string]$Prefix)
   if ([string]::IsNullOrWhiteSpace($Prefix) -or $Prefix.Length -lt 3) {
     $lbCompSuggest.ItemsSource = @()
-    $lbCompSuggest.Visibility = 'Collapsed'
+    $popCompSuggest.IsOpen = $false
     return }
   try {
     $cred = $null
@@ -121,12 +121,15 @@ function Update-ComputerSuggestions {
     $ds.PropertiesToLoad.Clear(); $ds.PropertiesToLoad.Add('sAMAccountName') | Out-Null
     $res = $ds.FindAll()
     $names = @{}
-    foreach ($r in $res) { $n = Get-FirstValue ($r.Properties['sAMAccountName']); if ($n) { $names[$n] = $true } }
-    $items = $names.Keys | Sort-Object | Select-Object -First 50
+    foreach ($r in $res) {
+      $n = Get-FirstValue ($r.Properties['sAMAccountName'])
+      if ($n) { $names[(Normalize-ComputerName $n)] = $true }
+    }
+    $items = @($names.Keys | Sort-Object | Select-Object -First 50)
     $lbCompSuggest.ItemsSource = $items
-    $lbCompSuggest.Visibility = $(if ($items.Count -gt 0) { 'Visible' } else { 'Collapsed' })
+    $popCompSuggest.IsOpen = ($items.Count -gt 0)
   } catch {
-    $lbCompSuggest.ItemsSource = @(); $lbCompSuggest.Visibility = 'Collapsed' }
+    $lbCompSuggest.ItemsSource = @(); $popCompSuggest.IsOpen = $false }
 }
 
 function Parse-WindowsLapsJson { param([string]$JsonText)
@@ -206,7 +209,7 @@ Start-Process -FilePath '$exe'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="LAPS UI (Windows &amp; Legacy) - v$CurrentVersion"
-        Height="640" Width="1000" MinHeight="640" MinWidth="1000"
+        Width="1000" MinWidth="1000" SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
   <Window.Resources>
@@ -313,8 +316,7 @@ Start-Process -FilePath '$exe'
     </Style>
   </Window.Resources>
 
-  <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <Grid Margin="16">
+  <Grid Margin="16">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
@@ -370,12 +372,15 @@ Start-Process -FilePath '$exe'
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
           <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
-          <ListBox  Grid.Row="1" Grid.Column="1" x:Name="lbCompSuggest" Visibility="Collapsed" MaxHeight="200" Margin="0,2,0,0"/>
+          <Popup    x:Name="popCompSuggest" PlacementTarget="{Binding ElementName=tbComp}" Placement="Bottom" StaysOpen="False">
+            <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
+              <ListBox x:Name="lbCompSuggest" MaxHeight="200" Width="{Binding ElementName=tbComp, Path=ActualWidth}" Background="#2D2D2D" Foreground="#EEEEEE"/>
+            </Border>
+          </Popup>
         </Grid>
       </GroupBox>
 
@@ -423,7 +428,7 @@ Start-Process -FilePath '$exe'
         <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
     </Grid>
-  </ScrollViewer>
+  </Grid>
 </Window>
 "@
 
@@ -437,6 +442,7 @@ $pbPass         = $window.FindName("pbPass")
 $tbServer       = $window.FindName("tbServer")
 $cbLdaps        = $window.FindName("cbLdaps")
 $tbComp         = $window.FindName("tbComp")
+$popCompSuggest = $window.FindName("popCompSuggest")
 $lbCompSuggest  = $window.FindName("lbCompSuggest")
 $btnGet         = $window.FindName("btnGet")
 $txtDetails     = $window.FindName("txtDetails")
@@ -503,17 +509,17 @@ $tbComp.Add_TextChanged({ Update-ComputerSuggestions $tbComp.Text })
 $lbCompSuggest.Add_MouseLeftButtonUp({
     if ($lbCompSuggest.SelectedItem) {
         $tbComp.Text = $lbCompSuggest.SelectedItem
-        $lbCompSuggest.Visibility = 'Collapsed'
+        $popCompSuggest.IsOpen = $false
         $tbComp.Focus(); $tbComp.CaretIndex = $tbComp.Text.Length
     }
 })
 $lbCompSuggest.Add_KeyDown({
     if ($_.Key -eq 'Return' -and $lbCompSuggest.SelectedItem) {
         $tbComp.Text = $lbCompSuggest.SelectedItem
-        $lbCompSuggest.Visibility = 'Collapsed'
+        $popCompSuggest.IsOpen = $false
         $tbComp.Focus(); $tbComp.CaretIndex = $tbComp.Text.Length
     } elseif ($_.Key -eq 'Escape') {
-        $lbCompSuggest.Visibility = 'Collapsed'
+        $popCompSuggest.IsOpen = $false
         $tbComp.Focus()
     }
 })
@@ -641,7 +647,7 @@ if ($updateInfo) {
 
 $btnGet.Add_Click({
   try {
-    $lbCompSuggest.Visibility = 'Collapsed'
+    $popCompSuggest.IsOpen = $false
     $btnGet.IsEnabled = $false
     $window.Cursor = 'Wait'
 
@@ -692,13 +698,13 @@ $btnGet.Add_Click({
 # Enter -> Retrieve
 $tbComp.Add_KeyDown({
     if ($_.Key -eq 'Return') {
-        $lbCompSuggest.Visibility = 'Collapsed'
+        $popCompSuggest.IsOpen = $false
         $btnGet.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
-    } elseif ($_.Key -eq 'Down' -and $lbCompSuggest.Visibility -eq 'Visible' -and $lbCompSuggest.Items.Count -gt 0) {
+    } elseif ($_.Key -eq 'Down' -and $popCompSuggest.IsOpen -and $lbCompSuggest.Items.Count -gt 0) {
         $lbCompSuggest.Focus()
         if ($lbCompSuggest.SelectedIndex -lt 0) { $lbCompSuggest.SelectedIndex = 0 }
     } elseif ($_.Key -eq 'Escape') {
-        $lbCompSuggest.Visibility = 'Collapsed'
+        $popCompSuggest.IsOpen = $false
     }
 })
 
