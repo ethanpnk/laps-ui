@@ -2,7 +2,7 @@
 # LDAP by default, optional LDAPS, modern dark UI, 20s countdown
 # Read-only "LAPS password" field + reliable green "cleared" message
 # Remember user & controller/domain (local JSON), update checker
-# NEW: colored clear-text password (letters / digits / symbols)
+# NEW: Cascadia Code font, expiration indicator, autocomplete & colorized password
 
 # --- Config ---
 $UseLdaps = $false
@@ -103,6 +103,35 @@ function Find-ComputerEntry { param([System.DirectoryServices.DirectorySearcher]
   $Searcher.Filter = "(&(objectCategory=computer)(|(sAMAccountName=$v$)(cn=$v)(dNSHostName=$v)))"
   $Searcher.FindOne() }
 
+function Update-ComputerSuggestions {
+  param([string]$Prefix)
+  if ([string]::IsNullOrWhiteSpace($Prefix) -or $Prefix.Length -lt 2) {
+    $lbCompSuggest.ItemsSource = @()
+    $popCompSuggest.IsOpen = $false
+    return }
+  try {
+    $cred = $null
+    if (-not [string]::IsNullOrWhiteSpace($tbUser.Text) -and -not [string]::IsNullOrWhiteSpace($pbPass.Password)) {
+      $secure = ConvertTo-SecureString -String $pbPass.Password -AsPlainText -Force
+      $cred = New-Object System.Management.Automation.PSCredential ($tbUser.Text, $secure) }
+    $ds = Get-DirectorySearcher -Credential $cred -ServerOrDomain $tbServer.Text
+    $v = Escape-LdapFilterValue $Prefix
+    $ds.PageSize = 50
+    $ds.Filter = "(&(objectCategory=computer)(|(sAMAccountName=$v*)(cn=$v*)(dNSHostName=$v*)))"
+    $ds.PropertiesToLoad.Clear(); $ds.PropertiesToLoad.Add('sAMAccountName') | Out-Null
+    $res = $ds.FindAll()
+    $names = @{}
+    foreach ($r in $res) {
+      $n = Get-FirstValue ($r.Properties['sAMAccountName'])
+      if ($n) { $names[(Normalize-ComputerName $n)] = $true }
+    }
+    $items = @($names.Keys | Sort-Object | Select-Object -First 50)
+    $lbCompSuggest.ItemsSource = $items
+    $popCompSuggest.IsOpen = ($items.Count -gt 0)
+  } catch {
+    $lbCompSuggest.ItemsSource = @(); $popCompSuggest.IsOpen = $false }
+}
+
 function Parse-WindowsLapsJson { param([string]$JsonText)
   if ([string]::IsNullOrWhiteSpace($JsonText)) { return $null }
   try {
@@ -180,7 +209,7 @@ Start-Process -FilePath '$exe'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="LAPS UI (Windows &amp; Legacy) - v$CurrentVersion"
-        Height="640" Width="1000" MinHeight="640" MinWidth="1000"
+        Width="1000" MinWidth="1000" SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
   <Window.Resources>
@@ -235,7 +264,7 @@ Start-Process -FilePath '$exe'
       <Setter Property="BorderBrush" Value="#3E3E42"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="Padding" Value="4"/>
-      <Setter Property="FontFamily" Value="Consolas"/>
+      <Setter Property="FontFamily" Value="Cascadia Code,Consolas"/>
       <Setter Property="FontSize" Value="20"/>
       <Setter Property="IsReadOnly" Value="True"/>
     </Style>
@@ -287,8 +316,7 @@ Start-Process -FilePath '$exe'
     </Style>
   </Window.Resources>
 
-  <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <Grid Margin="16">
+  <Grid Margin="16">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
@@ -304,7 +332,7 @@ Start-Process -FilePath '$exe'
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <GroupBox Grid.Column="0" Header="Credentials" Margin="0,0,8,14">
+        <GroupBox Grid.Column="0" Header="Credentials" Margin="0,0,8,0">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
@@ -320,7 +348,7 @@ Start-Process -FilePath '$exe'
           </Grid>
         </GroupBox>
 
-        <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,14">
+        <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,0">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
@@ -342,16 +370,34 @@ Start-Process -FilePath '$exe'
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
-          <TextBox   Grid.Column="1" x:Name="tbComp"/>
-          <Button    Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+          <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
+          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
+          <Popup    x:Name="popCompSuggest" PlacementTarget="{Binding ElementName=tbComp}" Placement="Bottom" StaysOpen="False">
+            <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
+              <ListBox x:Name="lbCompSuggest" MaxHeight="200" Width="{Binding ElementName=tbComp, Path=ActualWidth}" Background="#2D2D2D" Foreground="#EEEEEE"/>
+            </Border>
+          </Popup>
         </Grid>
       </GroupBox>
 
       <!-- Details -->
-      <GroupBox Grid.Row="2" Header="Details">
-        <TextBox x:Name="txtDetails" Height="80" AcceptsReturn="True" IsReadOnly="True"
-                 VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
+      <GroupBox Grid.Row="2" Header="Details" x:Name="gbDetails" Visibility="Collapsed">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <TextBox Grid.Row="0" x:Name="txtDetails" Height="80" AcceptsReturn="True" IsReadOnly="True"
+                   VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Code,Consolas" FontSize="12"/>
+          <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0" x:Name="spExpire" Visibility="Collapsed">
+            <Ellipse Width="10" Height="10" Margin="0,0,8,0" x:Name="ellExpire"/>
+            <TextBlock VerticalAlignment="Center" x:Name="lblExpire"/>
+          </StackPanel>
+        </Grid>
       </GroupBox>
 
       <!-- LAPS Password -->
@@ -367,7 +413,7 @@ Start-Process -FilePath '$exe'
           <!-- NEW: RichTextBox for colorized clear text -->
           <RichTextBox Grid.Row="0" Grid.Column="0" x:Name="rtbPwdOut" Visibility="Collapsed" Focusable="False" IsHitTestVisible="False"/>
 
-          <PasswordBox Grid.Row="0" Grid.Column="0" x:Name="pbPwdOut" FontFamily="Consolas" FontSize="20"
+          <PasswordBox Grid.Row="0" Grid.Column="0" x:Name="pbPwdOut" FontFamily="Cascadia Code,Consolas" FontSize="20"
                        IsHitTestVisible="False" Focusable="False"/>
 
           <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show" Margin="12,6,12,0" VerticalAlignment="Center"/>
@@ -382,9 +428,8 @@ Start-Process -FilePath '$exe'
         <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
     </Grid>
-  </ScrollViewer>
 </Window>
-"@
+"@ 
 
 # ---------- Build UI ----------
 $reader = (New-Object System.Xml.XmlNodeReader $xaml)
@@ -396,8 +441,14 @@ $pbPass         = $window.FindName("pbPass")
 $tbServer       = $window.FindName("tbServer")
 $cbLdaps        = $window.FindName("cbLdaps")
 $tbComp         = $window.FindName("tbComp")
+$popCompSuggest = $window.FindName("popCompSuggest")
+$lbCompSuggest  = $window.FindName("lbCompSuggest")
 $btnGet         = $window.FindName("btnGet")
+$gbDetails      = $window.FindName("gbDetails")
 $txtDetails     = $window.FindName("txtDetails")
+$spExpire       = $window.FindName("spExpire")
+$ellExpire      = $window.FindName("ellExpire")
+$lblExpire      = $window.FindName("lblExpire")
 $rtbPwdOut      = $window.FindName("rtbPwdOut")   # NEW
 $pbPwdOut       = $window.FindName("pbPwdOut")
 $cbShow         = $window.FindName("cbShow")
@@ -454,6 +505,36 @@ $window.Add_Closed({ Save-Prefs })
 
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true  })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false })
+$tbComp.Add_TextChanged({
+    Update-ComputerSuggestions $tbComp.Text
+    if ($gbDetails.Visibility -ne 'Collapsed') {
+        $gbDetails.Visibility = 'Collapsed'
+    }
+    $txtDetails.Text = ""
+    $script:CurrentLapsPassword = ""
+    $pbPwdOut.Password = ""
+    $rtbPwdOut.Document.Blocks.Clear()
+    $btnCopy.IsEnabled = $false
+    Update-ExpirationIndicator $null
+    $window.UpdateLayout()
+})
+$lbCompSuggest.Add_MouseLeftButtonUp({
+    if ($lbCompSuggest.SelectedItem) {
+        $tbComp.Text = $lbCompSuggest.SelectedItem
+        $popCompSuggest.IsOpen = $false
+        $tbComp.Focus(); $tbComp.CaretIndex = $tbComp.Text.Length
+    }
+})
+$lbCompSuggest.Add_KeyDown({
+    if ($_.Key -eq 'Return' -and $lbCompSuggest.SelectedItem) {
+        $tbComp.Text = $lbCompSuggest.SelectedItem
+        $popCompSuggest.IsOpen = $false
+        $tbComp.Focus(); $tbComp.CaretIndex = $tbComp.Text.Length
+    } elseif ($_.Key -eq 'Escape') {
+        $popCompSuggest.IsOpen = $false
+        $tbComp.Focus()
+    }
+})
 
 # ---------- NEW: colorized clear-text rendering ----------
 # Pre-create brushes
@@ -484,6 +565,22 @@ function Update-PasswordDisplay([string]$pwd) {
   $doc.Blocks.Clear()
   $doc.Blocks.Add($p) | Out-Null
   $rtbPwdOut.Document = $doc
+}
+
+function Update-ExpirationIndicator([nullable[DateTime]]$exp) {
+  if ($null -eq $exp) { $spExpire.Visibility = 'Collapsed'; return }
+  $now = Get-Date
+  $spExpire.Visibility = 'Visible'
+  if ($exp -lt $now) {
+    $ellExpire.Fill = 'Red'
+    $lblExpire.Text = "Expired on $exp"
+  } elseif (($exp - $now).TotalDays -le 2) {
+    $ellExpire.Fill = 'Orange'
+    $lblExpire.Text = "Expires soon ($exp)"
+  } else {
+    $ellExpire.Fill = 'LimeGreen'
+    $lblExpire.Text = "Expires on $exp"
+  }
 }
 
 # Show/Hide clear text
@@ -562,6 +659,15 @@ if ($updateInfo) {
 
 $btnGet.Add_Click({
   try {
+    $popCompSuggest.IsOpen = $false
+    $gbDetails.Visibility = 'Collapsed'
+    $txtDetails.Text = ""
+    $btnCopy.IsEnabled = $false
+    $pbPwdOut.Password = ""
+    $rtbPwdOut.Document.Blocks.Clear()
+    $script:CurrentLapsPassword = ""
+    Update-ExpirationIndicator $null
+    $window.UpdateLayout()
     $btnGet.IsEnabled = $false
     $window.Cursor = 'Wait'
 
@@ -590,16 +696,25 @@ $btnGet.Add_Click({
       if ($item.Expires) { $lines += ("Expiration : {0}" -f $item.Expires) }
       if ($item.DN)      { $lines += ("DN         : {0}" -f $item.DN) }
       $txtDetails.Text = ($lines -join [Environment]::NewLine)
+      $gbDetails.Visibility = 'Visible'
+      $window.UpdateLayout()
+      Update-ExpirationIndicator $item.Expires
     } else {
       $dn = Get-FirstValue (Get-PropValueCI $res.Properties 'distinguishedName')
       $txtDetails.Text = "No readable LAPS attribute on this computer.`r`nDN: $dn`r`n- LAPS not applied`r`n- No read permission`r`n- Rotation not yet performed."
+      $gbDetails.Visibility = 'Visible'
+      $window.UpdateLayout()
       $script:CurrentLapsPassword = ""
       $pbPwdOut.Password = ""
       if ($cbShow.IsChecked) { Update-PasswordDisplay "" }
       $btnCopy.IsEnabled = $false
+      Update-ExpirationIndicator $null
     }
   } catch {
     $txtDetails.Text = "Error: $($_.Exception.Message)"
+    $gbDetails.Visibility = 'Visible'
+    $window.UpdateLayout()
+    Update-ExpirationIndicator $null
   } finally {
     $window.Cursor = 'Arrow'
     $btnGet.IsEnabled = $true
@@ -607,6 +722,16 @@ $btnGet.Add_Click({
 })
 
 # Enter -> Retrieve
-$tbComp.Add_KeyDown({ if ($_.Key -eq 'Return') { $btnGet.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent))) } })
+$tbComp.Add_KeyDown({
+    if ($_.Key -eq 'Return') {
+        $popCompSuggest.IsOpen = $false
+        $btnGet.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+    } elseif ($_.Key -eq 'Down' -and $popCompSuggest.IsOpen -and $lbCompSuggest.Items.Count -gt 0) {
+        $lbCompSuggest.Focus()
+        if ($lbCompSuggest.SelectedIndex -lt 0) { $lbCompSuggest.SelectedIndex = 0 }
+    } elseif ($_.Key -eq 'Escape') {
+        $popCompSuggest.IsOpen = $false
+    }
+})
 
 [void]$window.ShowDialog()
