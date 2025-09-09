@@ -125,6 +125,11 @@ function Update-ComputerSuggestions {
       $n = Get-FirstValue ($r.Properties['sAMAccountName'])
       if ($n) { $names[(Normalize-ComputerName $n)] = $true }
     }
+    if ($script:Prefs.History) {
+      foreach ($h in $script:Prefs.History) {
+        if ($h -like "$Prefix*") { $names[$h] = $true }
+      }
+    }
     $items = @($names.Keys | Sort-Object | Select-Object -First 50)
     $lbCompSuggest.ItemsSource = $items
     $popCompSuggest.IsOpen = ($items.Count -gt 0)
@@ -407,7 +412,7 @@ Start-Process -FilePath '$exe'
             <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
 
           <!-- NEW: RichTextBox for colorized clear text -->
@@ -419,7 +424,12 @@ Start-Process -FilePath '$exe'
           <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show" Margin="12,6,12,0" VerticalAlignment="Center"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copy" Style="{StaticResource AccentButton}" IsEnabled="False"/>
 
-          <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
+          <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,8,0,0">
+            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBox x:Name="tbClipboardSecs" Width="50"/>
+          </StackPanel>
+
+          <TextBlock Grid.Row="2" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
         </Grid>
       </GroupBox>
 
@@ -454,6 +464,7 @@ $pbPwdOut       = $window.FindName("pbPwdOut")
 $cbShow         = $window.FindName("cbShow")
 $btnCopy        = $window.FindName("btnCopy")
 $lblCountdown   = $window.FindName("lblCountdown")
+$tbClipboardSecs = $window.FindName("tbClipboardSecs")
 $cbRememberUser = $window.FindName("cbRememberUser")
 $cbRememberServer = $window.FindName("cbRememberServer")
 $btnUpdate     = $window.FindName("btnUpdate")
@@ -462,6 +473,7 @@ $btnIgnore     = $window.FindName("btnIgnore")
 # Init
 $cbLdaps.IsChecked = $UseLdaps
 $script:UseLdaps   = [bool]$cbLdaps.IsChecked
+$tbClipboardSecs.Text = $ClipboardAutoClearSeconds
 $script:CurrentLapsPassword = ""
 $script:DoneTimer = $null
 
@@ -475,12 +487,19 @@ function Protect-String { param([string]$Text) if ([string]::IsNullOrWhiteSpace(
 function Unprotect-String { param([string]$Cipher) if ([string]::IsNullOrWhiteSpace($Cipher)) { return $null } try { $sec = ConvertTo-SecureString $Cipher; [Runtime.InteropServices.Marshal]::PtrToStringUni([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)) } catch { $Cipher } }
 
 function Save-Prefs {
+  $secs = 0
+  if ([int]::TryParse($tbClipboardSecs.Text, [ref]$secs) -and $secs -gt 0) {
+    $script:ClipboardAutoClearSeconds = $secs
+  }
   $script:Prefs = @{
-    RememberUser   = [bool]$cbRememberUser.IsChecked
-    UserName       = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
-    RememberServer = [bool]$cbRememberServer.IsChecked
-    ServerName     = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
-    IgnoreVersion  = $script:Prefs.IgnoreVersion
+    RememberUser     = [bool]$cbRememberUser.IsChecked
+    UserName         = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
+    RememberServer   = [bool]$cbRememberServer.IsChecked
+    ServerName       = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
+    UseLdaps         = [bool]$cbLdaps.IsChecked
+    ClipboardSeconds = $script:ClipboardAutoClearSeconds
+    History          = $script:Prefs.History
+    IgnoreVersion    = $script:Prefs.IgnoreVersion
   }
   ($script:Prefs | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
 }
@@ -491,8 +510,14 @@ function Load-Prefs {
       $script:Prefs = Get-Content $PrefFile -Raw | ConvertFrom-Json
       if ($script:Prefs.RememberUser) { $cbRememberUser.IsChecked = $true; if ($script:Prefs.UserName) { $tbUser.Text = Unprotect-String $script:Prefs.UserName } }
       if ($script:Prefs.RememberServer) { $cbRememberServer.IsChecked = $true; if ($script:Prefs.ServerName) { $tbServer.Text = Unprotect-String $script:Prefs.ServerName } }
+      if ($script:Prefs.UseLdaps) { $cbLdaps.IsChecked = [bool]$script:Prefs.UseLdaps }
+      if ($script:Prefs.ClipboardSeconds) { $script:ClipboardAutoClearSeconds = [int]$script:Prefs.ClipboardSeconds }
+      if ($script:Prefs.History -is [System.Collections.IEnumerable]) { $script:Prefs.History = @($script:Prefs.History) }
     } catch { $script:Prefs = @{} }
   }
+  if (-not $script:Prefs.History) { $script:Prefs.History = @() }
+  $tbClipboardSecs.Text = $script:ClipboardAutoClearSeconds
+  $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
 $cbRememberUser.Add_Checked({ Save-Prefs })
@@ -503,8 +528,9 @@ $cbRememberServer.Add_Unchecked({ Save-Prefs })
 $tbServer.Add_LostFocus({ if ($cbRememberServer.IsChecked) { Save-Prefs } })
 $window.Add_Closed({ Save-Prefs })
 
-$cbLdaps.Add_Checked({   $script:UseLdaps = $true  })
-$cbLdaps.Add_Unchecked({ $script:UseLdaps = $false })
+$cbLdaps.Add_Checked({   $script:UseLdaps = $true;  Save-Prefs })
+$cbLdaps.Add_Unchecked({ $script:UseLdaps = $false; Save-Prefs })
+$tbClipboardSecs.Add_LostFocus({ Save-Prefs })
 $tbComp.Add_TextChanged({
     Update-ComputerSuggestions $tbComp.Text
     if ($gbDetails.Visibility -ne 'Collapsed') {
@@ -683,6 +709,14 @@ $btnGet.Add_Click({
     $res = Find-ComputerEntry -Searcher $ds -ComputerName $tbComp.Text
     if (-not $res) { throw "Computer not found in AD (check spelling or OU)." }
 
+    $norm = Normalize-ComputerName -InputName $tbComp.Text
+    if ($norm) {
+      if (-not $script:Prefs.History) { $script:Prefs.History = @() }
+      $script:Prefs.History = @($norm) + @($script:Prefs.History | Where-Object { $_ -ne $norm })
+      if ($script:Prefs.History.Count -gt 50) { $script:Prefs.History = $script:Prefs.History[0..49] }
+      Save-Prefs
+    }
+
     $item = Get-LapsPasswordFromEntry -Result $res
     if ($item -and $item.Password) {
       $script:CurrentLapsPassword = [string]$item.Password
@@ -731,6 +765,14 @@ $tbComp.Add_KeyDown({
         if ($lbCompSuggest.SelectedIndex -lt 0) { $lbCompSuggest.SelectedIndex = 0 }
     } elseif ($_.Key -eq 'Escape') {
         $popCompSuggest.IsOpen = $false
+    }
+})
+
+$window.Add_KeyDown({
+    if ($_.Key -eq 'C' -and ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control)) {
+        if ($btnCopy.IsEnabled) {
+            $btnCopy.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+        }
     }
 })
 
