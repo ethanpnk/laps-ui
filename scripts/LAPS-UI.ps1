@@ -7,7 +7,7 @@
 # --- Config ---
 $UseLdaps = $false
 $ClipboardAutoClearSeconds = 20
-$CurrentVersion = '1.0.4'
+$CurrentVersion = '1.0.5'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
@@ -171,44 +171,66 @@ function Get-LapsPasswordFromEntry { param($Result)
   $null }
 
 # ---------- Update helpers ----------
+function Get-LatestReleaseInfo {
+  $uri = 'https://api.github.com/repos/ethanpnk/laps-ui/releases/latest'
+  try {
+    Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'LAPS-UI' } -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
 function Check-ForUpdates {
   param([string]$CurrentVersion)
-  $uri = 'https://api.github.com/repos/ethanpnk/laps-ui/releases/latest'
-  try { $release = Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'LAPS-UI' } -ErrorAction Stop }
-  catch { return $null }
+  $release = Get-LatestReleaseInfo
+  if (-not $release) { return $null }
+
   $latest = $release.tag_name.TrimStart('v')
   if ([version]$latest -le [version]$CurrentVersion) { return $null }
   if ($script:Prefs.IgnoreVersion -eq $latest) { return $null }
+
   $asset = $release.assets | Where-Object { $_.name -eq 'LAPS-UI.exe' } | Select-Object -First 1
   if (-not $asset) { return $null }
+
   $sha256 = $null
-  if ($release.body -match 'SHA256[:\s]+(?<hash>[A-Fa-f0-9]{64})') { $sha256 = $Matches['hash'] }
-  [pscustomobject]@{ Version=$latest; Url=$asset.browser_download_url; Sha256=$sha256 }
+  if ($release.body -match 'SHA256[:\s]+(?<hash>[A-Fa-f0-9]{64})') {
+    $sha256 = $Matches['hash']
+  }
+
+  [pscustomobject]@{
+    Version = $latest
+    Url     = $asset.browser_download_url
+    Sha256  = $sha256
+  }
 }
+
 function Start-AppUpdate {
   param($Info, $Window)
   try {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) "LAPS-UI-$($Info.Version).exe"
-    Invoke-WebRequest -Uri $Info.Url -OutFile $tmp -UseBasicParsing
+    Invoke-WebRequest -Uri $Info.Url -OutFile $tmp -UseBasicParsing -Headers @{ 'User-Agent' = 'LAPS-UI' }
     if ($Info.Sha256) {
       $h = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
       if ($h -ne $Info.Sha256) { throw "SHA256 mismatch" }
     }
     $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-    $script = @"
-Start-Sleep -Seconds 1
-Copy-Item -Path '$tmp' -Destination '$exe' -Force
-Start-Process -FilePath '$exe'
-"@
+    $appPid = $PID
+    $script = @'
+param([string]$Tmp,[string]$Exe,[int]$AppPid)
+while (Get-Process -Id $AppPid -ErrorAction SilentlyContinue) {
+  Start-Sleep -Milliseconds 200
+}
+Copy-Item -Path $Tmp -Destination $Exe -Force
+Start-Process -FilePath $Exe
+'@
     $ps = Join-Path ([IO.Path]::GetTempPath()) 'laps-ui-update.ps1'
     Set-Content -Path $ps -Value $script -Encoding UTF8
-    Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass','-File', $ps -Verb RunAs
+    Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$ps,'-Tmp',$tmp,'-Exe',$exe,'-AppPid',$appPid -WindowStyle Hidden
     $Window.Close()
   } catch {
     [System.Windows.MessageBox]::Show("Update failed: $($_.Exception.Message)", 'Update', 'OK', 'Error') | Out-Null
   }
 }
-
 # ---------- XAML (Dark) ----------
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -553,6 +575,10 @@ function Load-Prefs {
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
+$tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+$pbPass.Add_PasswordChanged({
+    $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+})
 $cbRememberUser.Add_Checked({ Save-Prefs })
 $cbRememberUser.Add_Unchecked({ Save-Prefs })
 $tbUser.Add_LostFocus({ if ($cbRememberUser.IsChecked) { Save-Prefs } })
