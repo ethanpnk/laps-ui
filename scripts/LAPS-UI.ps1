@@ -7,7 +7,7 @@
 # --- Config ---
 $UseLdaps = $false
 $ClipboardAutoClearSeconds = 20
-$CurrentVersion = '1.0.4'
+$CurrentVersion = '1.0.5'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
