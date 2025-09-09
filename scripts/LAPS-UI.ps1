@@ -373,14 +373,15 @@ Start-Process -FilePath '$exe'
       <GroupBox Grid.Row="1" Header="Search">
         <Grid>
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
           <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
-          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
+          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="History" Margin="12,0,0,0"/>
+          <Button   Grid.Row="0" Grid.Column="3" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
           <Popup    x:Name="popCompSuggest" PlacementTarget="{Binding ElementName=tbComp}" Placement="Bottom" StaysOpen="False">
             <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
               <ListBox x:Name="lbCompSuggest" MaxHeight="200" Width="{Binding ElementName=tbComp, Path=ActualWidth}" Background="#2D2D2D" Foreground="#EEEEEE"/>
@@ -453,6 +454,7 @@ $cbLdaps        = $window.FindName("cbLdaps")
 $tbComp         = $window.FindName("tbComp")
 $popCompSuggest = $window.FindName("popCompSuggest")
 $lbCompSuggest  = $window.FindName("lbCompSuggest")
+$btnHistory     = $window.FindName("btnHistory")
 $btnGet         = $window.FindName("btnGet")
 $gbDetails      = $window.FindName("gbDetails")
 $txtDetails     = $window.FindName("txtDetails")
@@ -491,6 +493,8 @@ function Save-Prefs {
   if ([int]::TryParse($tbClipboardSecs.Text, [ref]$secs) -and $secs -gt 0) {
     $script:ClipboardAutoClearSeconds = $secs
   }
+  $history = $script:Prefs.History
+  $ignore  = $script:Prefs.IgnoreVersion
   $script:Prefs = @{
     RememberUser     = [bool]$cbRememberUser.IsChecked
     UserName         = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
@@ -498,21 +502,31 @@ function Save-Prefs {
     ServerName       = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
     UseLdaps         = [bool]$cbLdaps.IsChecked
     ClipboardSeconds = $script:ClipboardAutoClearSeconds
-    History          = $script:Prefs.History
-    IgnoreVersion    = $script:Prefs.IgnoreVersion
+    History          = $history
+    IgnoreVersion    = $ignore
   }
-  ($script:Prefs | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
+  $persist = $script:Prefs.Clone()
+  $persist.History = @($history | ForEach-Object { Protect-String $_ })
+  ($persist | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
 }
 function Load-Prefs {
   $script:Prefs = @{}
   if (Test-Path $PrefFile) {
     try {
-      $script:Prefs = Get-Content $PrefFile -Raw | ConvertFrom-Json
-      if ($script:Prefs.RememberUser) { $cbRememberUser.IsChecked = $true; if ($script:Prefs.UserName) { $tbUser.Text = Unprotect-String $script:Prefs.UserName } }
-      if ($script:Prefs.RememberServer) { $cbRememberServer.IsChecked = $true; if ($script:Prefs.ServerName) { $tbServer.Text = Unprotect-String $script:Prefs.ServerName } }
-      if ($script:Prefs.UseLdaps) { $cbLdaps.IsChecked = [bool]$script:Prefs.UseLdaps }
-      if ($script:Prefs.ClipboardSeconds) { $script:ClipboardAutoClearSeconds = [int]$script:Prefs.ClipboardSeconds }
-      if ($script:Prefs.History -is [System.Collections.IEnumerable]) { $script:Prefs.History = @($script:Prefs.History) }
+      $loaded = Get-Content $PrefFile -Raw | ConvertFrom-Json
+      if ($loaded.RememberUser) { $cbRememberUser.IsChecked = $true; if ($loaded.UserName) { $tbUser.Text = Unprotect-String $loaded.UserName } }
+      if ($loaded.RememberServer) { $cbRememberServer.IsChecked = $true; if ($loaded.ServerName) { $tbServer.Text = Unprotect-String $loaded.ServerName } }
+      if ($loaded.UseLdaps) { $cbLdaps.IsChecked = [bool]$loaded.UseLdaps }
+      if ($loaded.ClipboardSeconds) { $script:ClipboardAutoClearSeconds = [int]$loaded.ClipboardSeconds }
+      $hist = @()
+      if ($loaded.History -is [System.Collections.IEnumerable]) {
+        foreach ($enc in $loaded.History) {
+          $dec = Unprotect-String $enc
+          if ($dec) { $hist += $dec }
+        }
+      }
+      $script:Prefs = $loaded
+      $script:Prefs.History = $hist
     } catch { $script:Prefs = @{} }
   }
   if (-not $script:Prefs.History) { $script:Prefs.History = @() }
@@ -559,6 +573,15 @@ $lbCompSuggest.Add_KeyDown({
     } elseif ($_.Key -eq 'Escape') {
         $popCompSuggest.IsOpen = $false
         $tbComp.Focus()
+    }
+})
+
+$btnHistory.Add_Click({
+    if ($script:Prefs.History -and $script:Prefs.History.Count -gt 0) {
+        $lbCompSuggest.ItemsSource = $script:Prefs.History
+        $lbCompSuggest.SelectedIndex = 0
+        $popCompSuggest.IsOpen = $true
+        $lbCompSuggest.Focus()
     }
 })
 
