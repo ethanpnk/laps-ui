@@ -385,7 +385,7 @@ Start-Process -FilePath '$exe'
       </GroupBox>
 
       <!-- Details -->
-      <GroupBox Grid.Row="2" Header="Details">
+      <GroupBox Grid.Row="2" Header="Details" x:Name="gbDetails" Visibility="Collapsed">
         <Grid>
           <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -444,6 +444,7 @@ $tbComp         = $window.FindName("tbComp")
 $popCompSuggest = $window.FindName("popCompSuggest")
 $lbCompSuggest  = $window.FindName("lbCompSuggest")
 $btnGet         = $window.FindName("btnGet")
+$gbDetails      = $window.FindName("gbDetails")
 $txtDetails     = $window.FindName("txtDetails")
 $spExpire       = $window.FindName("spExpire")
 $ellExpire      = $window.FindName("ellExpire")
@@ -504,7 +505,19 @@ $window.Add_Closed({ Save-Prefs })
 
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true  })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false })
-$tbComp.Add_TextChanged({ Update-ComputerSuggestions $tbComp.Text })
+$tbComp.Add_TextChanged({
+    Update-ComputerSuggestions $tbComp.Text
+    if ($gbDetails.Visibility -ne 'Collapsed') {
+        $gbDetails.Visibility = 'Collapsed'
+    }
+    $txtDetails.Text = ""
+    $script:CurrentLapsPassword = ""
+    $pbPwdOut.Password = ""
+    $rtbPwdOut.Document.Blocks.Clear()
+    $btnCopy.IsEnabled = $false
+    Update-ExpirationIndicator $null
+    $window.UpdateLayout()
+})
 $lbCompSuggest.Add_MouseLeftButtonUp({
     if ($lbCompSuggest.SelectedItem) {
         $tbComp.Text = $lbCompSuggest.SelectedItem
@@ -647,6 +660,14 @@ if ($updateInfo) {
 $btnGet.Add_Click({
   try {
     $popCompSuggest.IsOpen = $false
+    $gbDetails.Visibility = 'Collapsed'
+    $txtDetails.Text = ""
+    $btnCopy.IsEnabled = $false
+    $pbPwdOut.Password = ""
+    $rtbPwdOut.Document.Blocks.Clear()
+    $script:CurrentLapsPassword = ""
+    Update-ExpirationIndicator $null
+    $window.UpdateLayout()
     $btnGet.IsEnabled = $false
     $window.Cursor = 'Wait'
 
@@ -675,10 +696,14 @@ $btnGet.Add_Click({
       if ($item.Expires) { $lines += ("Expiration : {0}" -f $item.Expires) }
       if ($item.DN)      { $lines += ("DN         : {0}" -f $item.DN) }
       $txtDetails.Text = ($lines -join [Environment]::NewLine)
+      $gbDetails.Visibility = 'Visible'
+      $window.UpdateLayout()
       Update-ExpirationIndicator $item.Expires
     } else {
       $dn = Get-FirstValue (Get-PropValueCI $res.Properties 'distinguishedName')
       $txtDetails.Text = "No readable LAPS attribute on this computer.`r`nDN: $dn`r`n- LAPS not applied`r`n- No read permission`r`n- Rotation not yet performed."
+      $gbDetails.Visibility = 'Visible'
+      $window.UpdateLayout()
       $script:CurrentLapsPassword = ""
       $pbPwdOut.Password = ""
       if ($cbShow.IsChecked) { Update-PasswordDisplay "" }
@@ -687,6 +712,8 @@ $btnGet.Add_Click({
     }
   } catch {
     $txtDetails.Text = "Error: $($_.Exception.Message)"
+    $gbDetails.Visibility = 'Visible'
+    $window.UpdateLayout()
     Update-ExpirationIndicator $null
   } finally {
     $window.Cursor = 'Arrow'
