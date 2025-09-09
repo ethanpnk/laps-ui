@@ -171,25 +171,44 @@ function Get-LapsPasswordFromEntry { param($Result)
   $null }
 
 # ---------- Update helpers ----------
+function Get-LatestReleaseInfo {
+  $uri = 'https://api.github.com/repos/ethanpnk/laps-ui/releases/latest'
+  try {
+    Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'LAPS-UI' } -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
 function Check-ForUpdates {
   param([string]$CurrentVersion)
-  $uri = 'https://api.github.com/repos/ethanpnk/laps-ui/releases/latest'
-  try { $release = Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'LAPS-UI' } -ErrorAction Stop }
-  catch { return $null }
+  $release = Get-LatestReleaseInfo
+  if (-not $release) { return $null }
+
   $latest = $release.tag_name.TrimStart('v')
   if ([version]$latest -le [version]$CurrentVersion) { return $null }
   if ($script:Prefs.IgnoreVersion -eq $latest) { return $null }
+
   $asset = $release.assets | Where-Object { $_.name -eq 'LAPS-UI.exe' } | Select-Object -First 1
   if (-not $asset) { return $null }
+
   $sha256 = $null
-  if ($release.body -match 'SHA256[:\s]+(?<hash>[A-Fa-f0-9]{64})') { $sha256 = $Matches['hash'] }
-  [pscustomobject]@{ Version=$latest; Url=$asset.browser_download_url; Sha256=$sha256 }
+  if ($release.body -match 'SHA256[:\s]+(?<hash>[A-Fa-f0-9]{64})') {
+    $sha256 = $Matches['hash']
+  }
+
+  [pscustomobject]@{
+    Version = $latest
+    Url     = $asset.browser_download_url
+    Sha256  = $sha256
+  }
 }
+
 function Start-AppUpdate {
   param($Info, $Window)
   try {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) "LAPS-UI-$($Info.Version).exe"
-    Invoke-WebRequest -Uri $Info.Url -OutFile $tmp -UseBasicParsing
+    Invoke-WebRequest -Uri $Info.Url -OutFile $tmp -UseBasicParsing -Headers @{ 'User-Agent' = 'LAPS-UI' }
     if ($Info.Sha256) {
       $h = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
       if ($h -ne $Info.Sha256) { throw "SHA256 mismatch" }
@@ -208,7 +227,6 @@ Start-Process -FilePath '$exe'
     [System.Windows.MessageBox]::Show("Update failed: $($_.Exception.Message)", 'Update', 'OK', 'Error') | Out-Null
   }
 }
-
 # ---------- XAML (Dark) ----------
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
