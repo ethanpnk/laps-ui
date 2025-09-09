@@ -1,17 +1,19 @@
 ﻿# LAPS-UI.ps1 - WPF Dark, PS 5.1 (STA)
 # LDAP by default, optional LDAPS, modern dark UI, 20s countdown
-# "LAPS password" field is read-only + reliable green message at the end of the countdown
-# + Checkboxes "Remember user" and "Remember controller/domain" (local persistence %LOCALAPPDATA%\LAPS-UI\prefs.json)
+# Read-only "LAPS password" field + reliable green "cleared" message
+# Remember user & controller/domain (local JSON), update checker
+# NEW: colored clear-text password (letters / digits / symbols)
 
 # --- Config ---
 $UseLdaps = $false
 $ClipboardAutoClearSeconds = 20
+$CurrentVersion = '1.0.4'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
 Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null
 
-# ---------- Helpers LDAP ----------
+# ---------- LDAP helpers ----------
 function Convert-FileTime { param([object]$Value)
   if (-not $Value) { return $null }
   try { [DateTime]::FromFileTimeUtc([int64]$Value).ToLocalTime() } catch { $null } }
@@ -134,11 +136,50 @@ function Get-LapsPasswordFromEntry { param($Result)
 
   $null }
 
+# ---------- Update helpers ----------
+function Check-ForUpdates {
+  param([string]$CurrentVersion)
+  $uri = 'https://api.github.com/repos/ethanpnk/laps-ui/releases/latest'
+  try { $release = Invoke-RestMethod -Uri $uri -Headers @{ 'User-Agent' = 'LAPS-UI' } -ErrorAction Stop }
+  catch { return $null }
+  $latest = $release.tag_name.TrimStart('v')
+  if ([version]$latest -le [version]$CurrentVersion) { return $null }
+  if ($script:Prefs.IgnoreVersion -eq $latest) { return $null }
+  $asset = $release.assets | Where-Object { $_.name -eq 'LAPS-UI.exe' } | Select-Object -First 1
+  if (-not $asset) { return $null }
+  $sha256 = $null
+  if ($release.body -match 'SHA256[:\s]+(?<hash>[A-Fa-f0-9]{64})') { $sha256 = $Matches['hash'] }
+  [pscustomobject]@{ Version=$latest; Url=$asset.browser_download_url; Sha256=$sha256 }
+}
+function Start-AppUpdate {
+  param($Info, $Window)
+  try {
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) "LAPS-UI-$($Info.Version).exe"
+    Invoke-WebRequest -Uri $Info.Url -OutFile $tmp -UseBasicParsing
+    if ($Info.Sha256) {
+      $h = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
+      if ($h -ne $Info.Sha256) { throw "SHA256 mismatch" }
+    }
+    $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $script = @"
+Start-Sleep -Seconds 1
+Copy-Item -Path '$tmp' -Destination '$exe' -Force
+Start-Process -FilePath '$exe'
+"@
+    $ps = Join-Path ([IO.Path]::GetTempPath()) 'laps-ui-update.ps1'
+    Set-Content -Path $ps -Value $script -Encoding UTF8
+    Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass','-File', $ps -Verb RunAs
+    $Window.Close()
+  } catch {
+    [System.Windows.MessageBox]::Show("Update failed: $($_.Exception.Message)", 'Update', 'OK', 'Error') | Out-Null
+  }
+}
+
 # ---------- XAML (Dark) ----------
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="LAPS UI (Windows &amp; Legacy) - v1.0.3"
+        Title="LAPS UI (Windows &amp; Legacy) - v$CurrentVersion"
         Height="640" Width="1000" MinHeight="640" MinWidth="1000"
         WindowStartupLocation="CenterScreen"
         Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
@@ -164,12 +205,8 @@ function Get-LapsPasswordFromEntry { param($Result)
         </Setter.Value>
       </Setter>
       <Style.Triggers>
-        <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="#0C60C0"/>
-        </Trigger>
-        <Trigger Property="IsEnabled" Value="False">
-          <Setter Property="Opacity" Value="0.5"/>
-        </Trigger>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#0C60C0"/></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
       </Style.Triggers>
     </Style>
 
@@ -182,16 +219,27 @@ function Get-LapsPasswordFromEntry { param($Result)
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TextBox">
-            <Border Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="4">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
               <ScrollViewer x:Name="PART_ContentHost"/>
             </Border>
           </ControlTemplate>
         </Setter.Value>
       </Setter>
     </Style>
+
+    <!-- NEW: RichTextBox style for colorized password -->
+    <Style TargetType="RichTextBox">
+      <Setter Property="Background" Value="#2D2D2D"/>
+      <Setter Property="Foreground" Value="#EEEEEE"/>
+      <Setter Property="BorderBrush" Value="#3E3E42"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="4"/>
+      <Setter Property="FontFamily" Value="Consolas"/>
+      <Setter Property="FontSize" Value="20"/>
+      <Setter Property="IsReadOnly" Value="True"/>
+    </Style>
+
     <Style TargetType="PasswordBox">
       <Setter Property="Background" Value="#2D2D2D"/>
       <Setter Property="Foreground" Value="#EEEEEE"/>
@@ -201,10 +249,8 @@ function Get-LapsPasswordFromEntry { param($Result)
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="PasswordBox">
-            <Border Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="4">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
               <ScrollViewer x:Name="PART_ContentHost"/>
             </Border>
           </ControlTemplate>
@@ -221,14 +267,8 @@ function Get-LapsPasswordFromEntry { param($Result)
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="{x:Type GroupBox}">
-            <Border CornerRadius="8"
-                    Background="#252526"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    Margin="0,8,0,0">
-              <Border.Effect>
-                <DropShadowEffect Color="#000000" BlurRadius="10" ShadowDepth="2" Opacity="0.4"/>
-              </Border.Effect>
+            <Border CornerRadius="8" Background="#252526" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" Margin="0,8,0,0">
               <DockPanel LastChildFill="True">
                 <Border DockPanel.Dock="Top" Background="#2B2B2B" Padding="8,4" CornerRadius="8,8,0,0">
                   <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="#BEBEBE"/>
@@ -244,29 +284,6 @@ function Get-LapsPasswordFromEntry { param($Result)
     <Style TargetType="CheckBox">
       <Setter Property="Foreground" Value="#E0E0E0"/>
       <Setter Property="Margin" Value="0,4,0,0"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="CheckBox">
-            <StackPanel Orientation="Horizontal">
-              <Border x:Name="box" Width="16" Height="16" CornerRadius="3"
-                      Background="#2D2D2D" BorderBrush="#3E3E42" BorderThickness="1" Margin="0,0,8,0">
-                <Path x:Name="check" Data="M2,8 L6,12 L14,4" Stroke="White" StrokeThickness="2" Visibility="Collapsed"/>
-              </Border>
-              <ContentPresenter VerticalAlignment="Center"/>
-            </StackPanel>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="box" Property="Background" Value="#0A84FF"/>
-                <Setter TargetName="check" Property="Visibility" Value="Visible"/>
-              </Trigger>
-              <Trigger Property="IsEnabled" Value="False">
-                <Setter TargetName="box" Property="Opacity" Value="0.5"/>
-                <Setter Property="Foreground" Value="#888"/>
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
     </Style>
   </Window.Resources>
 
@@ -277,49 +294,39 @@ function Get-LapsPasswordFromEntry { param($Result)
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
-      <!-- Top forms: credentials & AD target side by side -->
+      <!-- Credentials & AD target side by side -->
       <Grid Grid.Row="0" Margin="0,0,0,14">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Credentials -->
         <GroupBox Grid.Column="0" Header="Credentials" Margin="0,0,8,14">
           <Grid>
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto"/>
-              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/>
-              <RowDefinition Height="Auto"/>
-              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-
             <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbUser"/>
-
-            <TextBlock  Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
             <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="0,8,0,0"/>
-
             <CheckBox Grid.Row="2" Grid.Column="1" x:Name="cbRememberUser" Content="Remember user" Margin="0,8,0,0"/>
           </Grid>
         </GroupBox>
 
-        <!-- AD Target -->
         <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,14">
           <Grid>
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto"/>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/>
-              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
@@ -333,14 +340,11 @@ function Get-LapsPasswordFromEntry { param($Result)
       <GroupBox Grid.Row="1" Header="Search">
         <Grid>
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
           <TextBox   Grid.Column="1" x:Name="tbComp"/>
-          <Button    Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}"
-                     IsDefault="True" Margin="12,0,0,0"/>
+          <Button    Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
         </Grid>
       </GroupBox>
 
@@ -350,36 +354,33 @@ function Get-LapsPasswordFromEntry { param($Result)
                  VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
       </GroupBox>
 
-      <!-- Password -->
+      <!-- LAPS Password -->
       <GroupBox Grid.Row="3" Header="LAPS Password">
         <Grid>
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
 
-          <TextBox     Grid.Row="0" Grid.Column="0" x:Name="txtPwdOut"
-                       FontFamily="Consolas" FontSize="20"
-                       Visibility="Collapsed" IsReadOnly="True" Focusable="False"/>
-          <PasswordBox Grid.Row="0" Grid.Column="0" x:Name="pbPwdOut"
-                       FontFamily="Consolas" FontSize="20"
+          <!-- NEW: RichTextBox for colorized clear text -->
+          <RichTextBox Grid.Row="0" Grid.Column="0" x:Name="rtbPwdOut" Visibility="Collapsed" Focusable="False" IsHitTestVisible="False"/>
+
+          <PasswordBox Grid.Row="0" Grid.Column="0" x:Name="pbPwdOut" FontFamily="Consolas" FontSize="20"
                        IsHitTestVisible="False" Focusable="False"/>
 
-          <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show"
-                    Margin="12,6,12,0" VerticalAlignment="Center"/>
-          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copy"
-                    Style="{StaticResource AccentButton}" IsEnabled="False"/>
+          <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show" Margin="12,6,12,0" VerticalAlignment="Center"/>
+          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copy" Style="{StaticResource AccentButton}" IsEnabled="False"/>
 
-          <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblCountdown"
-                     Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
+          <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
         </Grid>
       </GroupBox>
 
+      <StackPanel Grid.Row="4" Orientation="Horizontal">
+        <Button x:Name="btnUpdate" Content="Update" Style="{StaticResource AccentButton}" Visibility="Collapsed"/>
+        <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
+      </StackPanel>
     </Grid>
   </ScrollViewer>
 </Window>
@@ -397,13 +398,15 @@ $cbLdaps        = $window.FindName("cbLdaps")
 $tbComp         = $window.FindName("tbComp")
 $btnGet         = $window.FindName("btnGet")
 $txtDetails     = $window.FindName("txtDetails")
-$txtPwdOut      = $window.FindName("txtPwdOut")
+$rtbPwdOut      = $window.FindName("rtbPwdOut")   # NEW
 $pbPwdOut       = $window.FindName("pbPwdOut")
 $cbShow         = $window.FindName("cbShow")
 $btnCopy        = $window.FindName("btnCopy")
 $lblCountdown   = $window.FindName("lblCountdown")
 $cbRememberUser = $window.FindName("cbRememberUser")
 $cbRememberServer = $window.FindName("cbRememberServer")
+$btnUpdate     = $window.FindName("btnUpdate")
+$btnIgnore     = $window.FindName("btnIgnore")
 
 # Init
 $cbLdaps.IsChecked = $UseLdaps
@@ -411,51 +414,33 @@ $script:UseLdaps   = [bool]$cbLdaps.IsChecked
 $script:CurrentLapsPassword = ""
 $script:DoneTimer = $null
 
-# --- Preferences (only the user and the controller, never the password; DPAPI-encrypted values) ---
+# --- Prefs (unchanged from your version) ---
 $PrefDir  = Join-Path $env:LOCALAPPDATA 'LAPS-UI'
 $PrefFile = Join-Path $PrefDir 'prefs.json'
 New-Item -Path $PrefDir -ItemType Directory -Force | Out-Null
+$script:Prefs = @{}
 
-function Protect-String {
-  param([string]$Text)
-  if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
-  $sec = ConvertTo-SecureString $Text -AsPlainText -Force
-  ConvertFrom-SecureString $sec
-}
-
-function Unprotect-String {
-  param([string]$Cipher)
-  if ([string]::IsNullOrWhiteSpace($Cipher)) { return $null }
-  try {
-    $sec = ConvertTo-SecureString $Cipher
-    [Runtime.InteropServices.Marshal]::PtrToStringUni(
-      [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
-    )
-  } catch { $Cipher }
-}
+function Protect-String { param([string]$Text) if ([string]::IsNullOrWhiteSpace($Text)) { return $null } $sec = ConvertTo-SecureString $Text -AsPlainText -Force; ConvertFrom-SecureString $sec }
+function Unprotect-String { param([string]$Cipher) if ([string]::IsNullOrWhiteSpace($Cipher)) { return $null } try { $sec = ConvertTo-SecureString $Cipher; [Runtime.InteropServices.Marshal]::PtrToStringUni([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)) } catch { $Cipher } }
 
 function Save-Prefs {
-  $pref = @{
-    RememberUser = [bool]$cbRememberUser.IsChecked
-    UserName     = $(if ($cbRememberUser.IsChecked) { Protect-String $tbUser.Text } else { $null })
+  $script:Prefs = @{
+    RememberUser   = [bool]$cbRememberUser.IsChecked
+    UserName       = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
     RememberServer = [bool]$cbRememberServer.IsChecked
     ServerName     = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
+    IgnoreVersion  = $script:Prefs.IgnoreVersion
   }
-  ($pref | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
+  ($script:Prefs | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
 }
 function Load-Prefs {
+  $script:Prefs = @{}
   if (Test-Path $PrefFile) {
     try {
-      $p = Get-Content $PrefFile -Raw | ConvertFrom-Json
-      if ($p.RememberUser) {
-        $cbRememberUser.IsChecked = $true
-        if ($p.UserName) { $tbUser.Text = Unprotect-String $p.UserName }
-      }
-      if ($p.RememberServer) {
-        $cbRememberServer.IsChecked = $true
-        if ($p.ServerName) { $tbServer.Text = Unprotect-String $p.ServerName }
-      }
-    } catch {}
+      $script:Prefs = Get-Content $PrefFile -Raw | ConvertFrom-Json
+      if ($script:Prefs.RememberUser) { $cbRememberUser.IsChecked = $true; if ($script:Prefs.UserName) { $tbUser.Text = Unprotect-String $script:Prefs.UserName } }
+      if ($script:Prefs.RememberServer) { $cbRememberServer.IsChecked = $true; if ($script:Prefs.ServerName) { $tbServer.Text = Unprotect-String $script:Prefs.ServerName } }
+    } catch { $script:Prefs = @{} }
   }
 }
 Load-Prefs
@@ -470,19 +455,50 @@ $window.Add_Closed({ Save-Prefs })
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true  })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false })
 
-# Show/Hide output
+# ---------- NEW: colorized clear-text rendering ----------
+# Pre-create brushes
+$bc = New-Object Windows.Media.BrushConverter
+$BrushDigits   = $bc.ConvertFromString("#81D4FA")   # light blue
+$BrushLetters  = $bc.ConvertFromString("#C5E1A5")   # light green
+$BrushSymbols  = $bc.ConvertFromString("#FFB74D")   # orange
+$BrushDefault  = $bc.ConvertFromString("#EEEEEE")
+
+function Update-PasswordDisplay([string]$pwd) {
+  # Build a single-line FlowDocument with per-char coloring
+  $doc = New-Object System.Windows.Documents.FlowDocument
+  $doc.PagePadding = [Windows.Thickness]::new(0)
+  $p = New-Object System.Windows.Documents.Paragraph
+  $p.Margin = [Windows.Thickness]::new(0)
+  $p.LineHeight = 28
+
+  foreach ($ch in $pwd.ToCharArray()) {
+    $run = New-Object System.Windows.Documents.Run ($ch)
+    switch -regex ($ch) {
+      '^[0-9]$'        { $run.Foreground = $BrushDigits;  break }
+      '^[A-Za-z]$'     { $run.Foreground = $BrushLetters; break }
+      default          { $run.Foreground = $BrushSymbols; break }
+    }
+    $p.Inlines.Add($run) | Out-Null
+  }
+
+  $doc.Blocks.Clear()
+  $doc.Blocks.Add($p) | Out-Null
+  $rtbPwdOut.Document = $doc
+}
+
+# Show/Hide clear text
 $cbShow.Add_Checked({
-  $txtPwdOut.Text = $script:CurrentLapsPassword
-  $txtPwdOut.Visibility = 'Visible'
+  Update-PasswordDisplay $script:CurrentLapsPassword
+  $rtbPwdOut.Visibility = 'Visible'
   $pbPwdOut.Visibility  = 'Collapsed'
 })
 $cbShow.Add_Unchecked({
   $pbPwdOut.Password = $script:CurrentLapsPassword
   $pbPwdOut.Visibility  = 'Visible'
-  $txtPwdOut.Visibility = 'Collapsed'
+  $rtbPwdOut.Visibility = 'Collapsed'
 })
 
-# Countdown timer
+# ---------- Countdown & copy ----------
 $script:CountdownRemaining = 0
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromSeconds(1)
@@ -491,67 +507,40 @@ $timer.Add_Tick({
     $script:CountdownRemaining--
     $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
     if ($script:CountdownRemaining -le 0) {
-      try {
-        if ([System.Windows.Clipboard]::ContainsText()) {
-          $txt = [System.Windows.Clipboard]::GetText()
-          if (($txt) -and ($txt -eq $script:CurrentLapsPassword)) {
-            [System.Windows.Clipboard]::Clear()
-          }
-        }
-      } catch {}
+      try { if ([System.Windows.Clipboard]::ContainsText()) {
+        $txt = [System.Windows.Clipboard]::GetText()
+        if ($txt -and $txt -eq $script:CurrentLapsPassword) { [System.Windows.Clipboard]::Clear() } } } catch {}
       $timer.Stop()
       $lblCountdown.Text = "Clipboard cleared"
       $lblCountdown.Foreground = 'LimeGreen'
       $script:DoneTimer = New-Object System.Windows.Threading.DispatcherTimer
       $script:DoneTimer.Interval = [TimeSpan]::FromSeconds(2)
-      $script:DoneTimer.Add_Tick({
-        param($sender,$e)
-        $sender.Stop()
-        $lblCountdown.Visibility = 'Collapsed'
-        $lblCountdown.Foreground = '#FFA07A'
-      })
+      $script:DoneTimer.Add_Tick({ param($sender,$e) $sender.Stop(); $lblCountdown.Visibility='Collapsed'; $lblCountdown.Foreground='#FFA07A' })
       $script:DoneTimer.Start()
     }
-  } else {
-    $timer.Stop()
-    $lblCountdown.Visibility = 'Collapsed'
-  }
+  } else { $timer.Stop(); $lblCountdown.Visibility = 'Collapsed' }
 })
 
-# COPY (best effort without Win+V)
 $btnCopy.Add_Click({
   if ([string]::IsNullOrWhiteSpace($script:CurrentLapsPassword)) { return }
-
   $usedWinRT = $false
-  $winRtSupported = $false
   try {
     $winRtSupported = [Windows.Foundation.Metadata.ApiInformation]::IsMethodPresent(
-      "Windows.ApplicationModel.DataTransfer.Clipboard", "SetContentWithOptions"
-    )
-  } catch {}
-
-  if ($winRtSupported) {
-    try {
+      "Windows.ApplicationModel.DataTransfer.Clipboard", "SetContentWithOptions")
+    if ($winRtSupported) {
       $dp = New-Object Windows.ApplicationModel.DataTransfer.DataPackage
       $dp.RequestedOperation = [Windows.ApplicationModel.DataTransfer.DataPackageOperation]::Copy
       $dp.SetText($script:CurrentLapsPassword)
-
       $opt = New-Object Windows.ApplicationModel.DataTransfer.ClipboardContentOptions
-      $opt.IsAllowedInHistory = $false
-      $opt.IsRoamingEnabled   = $false
-
-      [Windows.ApplicationModel.DataTransfer.Clipboard]::SetContentWithOptions($dp, $opt)
+      $opt.IsAllowedInHistory = $false; $opt.IsRoamingEnabled = $false
+      [Windows.ApplicationModel.DataTransfer.Clipboard]::SetContentWithOptions($dp,$opt)
       [Windows.ApplicationModel.DataTransfer.Clipboard]::Flush()
       $usedWinRT = $true
-    } catch { $usedWinRT = $false }
-  }
+    }
+  } catch {}
+  if (-not $usedWinRT) { [System.Windows.Clipboard]::SetText($script:CurrentLapsPassword) }
 
-  if (-not $usedWinRT) {
-    [System.Windows.Clipboard]::SetText($script:CurrentLapsPassword)
-  }
-
-  [System.Windows.MessageBox]::Show(
-    ("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
+  [System.Windows.MessageBox]::Show(("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
     "Copied",'OK','Information') | Out-Null
 
   $script:CountdownRemaining = $ClipboardAutoClearSeconds
@@ -561,7 +550,16 @@ $btnCopy.Add_Click({
   $timer.Stop(); $timer.Start()
 })
 
-# Retrieve
+# ---------- Retrieve ----------
+$updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
+if ($updateInfo) {
+  $btnUpdate.Content = "Update to v$($updateInfo.Version)"
+  $btnUpdate.Visibility = 'Visible'
+  $btnIgnore.Visibility = 'Visible'
+  $btnUpdate.Add_Click({ Start-AppUpdate -Info $updateInfo -Window $window })
+  $btnIgnore.Add_Click({ $script:Prefs.IgnoreVersion = $updateInfo.Version; Save-Prefs; $btnUpdate.Visibility='Collapsed'; $btnIgnore.Visibility='Collapsed' })
+}
+
 $btnGet.Add_Click({
   try {
     $btnGet.IsEnabled = $false
@@ -569,12 +567,10 @@ $btnGet.Add_Click({
 
     $cred = $null
     if (-not [string]::IsNullOrWhiteSpace($tbUser.Text)) {
-      if ([string]::IsNullOrWhiteSpace($pbPass.Password)) {
-        throw "You entered a username without a password."
-      }
+      if ([string]::IsNullOrWhiteSpace($pbPass.Password)) { throw "You entered a username without a password." }
       $secure = ConvertTo-SecureString -String $pbPass.Password -AsPlainText -Force
       $cred = New-Object System.Management.Automation.PSCredential ($tbUser.Text, $secure)
-      if ($cbRememberUser.IsChecked -or $cbRememberServer.IsChecked) { Save-Prefs } # in case the user or server changes now
+      if ($cbRememberUser.IsChecked -or $cbRememberServer.IsChecked) { Save-Prefs }
     }
 
     $ds  = Get-DirectorySearcher -Credential $cred -ServerOrDomain $tbServer.Text
@@ -585,7 +581,7 @@ $btnGet.Add_Click({
     if ($item -and $item.Password) {
       $script:CurrentLapsPassword = [string]$item.Password
       $pbPwdOut.Password = $script:CurrentLapsPassword
-      $txtPwdOut.Text    = $script:CurrentLapsPassword
+      if ($cbShow.IsChecked) { Update-PasswordDisplay $script:CurrentLapsPassword }
       $btnCopy.IsEnabled = $true
 
       $lines = @()
@@ -599,7 +595,7 @@ $btnGet.Add_Click({
       $txtDetails.Text = "No readable LAPS attribute on this computer.`r`nDN: $dn`r`n- LAPS not applied`r`n- No read permission`r`n- Rotation not yet performed."
       $script:CurrentLapsPassword = ""
       $pbPwdOut.Password = ""
-      $txtPwdOut.Text = ""
+      if ($cbShow.IsChecked) { Update-PasswordDisplay "" }
       $btnCopy.IsEnabled = $false
     }
   } catch {
@@ -611,6 +607,6 @@ $btnGet.Add_Click({
 })
 
 # Enter -> Retrieve
-$tbComp.Add_KeyDown({ if ($_.Key -eq 'Return') { $btnGet.RaiseEvent((New-Object System.Windows.RoutedEventArgs([Windows.Controls.Button]::ClickEvent))) } })
+$tbComp.Add_KeyDown({ if ($_.Key -eq 'Return') { $btnGet.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent))) } })
 
 [void]$window.ShowDialog()

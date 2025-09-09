@@ -1,0 +1,7 @@
+# Ignorer le script local de build
+Build-LAPS-UI.ps1
+
+# (Optionnel) Ne pas versionner les binaires générés
+scripts/LAPS-UI.exe
+scripts/LAPS-UI.exe.config
+scripts/*.pdb
