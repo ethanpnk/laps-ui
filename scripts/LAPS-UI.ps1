@@ -575,6 +575,10 @@ function Load-Prefs {
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
+$tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+$pbPass.Add_PasswordChanged({
+    $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+})
 $cbRememberUser.Add_Checked({ Save-Prefs })
 $cbRememberUser.Add_Unchecked({ Save-Prefs })
 $tbUser.Add_LostFocus({ if ($cbRememberUser.IsChecked) { Save-Prefs } })
