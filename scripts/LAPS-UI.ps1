@@ -105,9 +105,9 @@ function Find-ComputerEntry { param([System.DirectoryServices.DirectorySearcher]
 
 function Update-ComputerSuggestions {
   param([string]$Prefix)
-  if ([string]::IsNullOrWhiteSpace($Prefix) -or $Prefix.Length -lt 2) {
-    $tbComp.ItemsSource = @()
-    $tbComp.IsDropDownOpen = $false
+  if ([string]::IsNullOrWhiteSpace($Prefix) -or $Prefix.Length -lt 3) {
+    $lbCompSuggest.ItemsSource = @()
+    $lbCompSuggest.Visibility = 'Collapsed'
     return }
   try {
     $cred = $null
@@ -123,10 +123,10 @@ function Update-ComputerSuggestions {
     $names = @{}
     foreach ($r in $res) { $n = Get-FirstValue ($r.Properties['sAMAccountName']); if ($n) { $names[$n] = $true } }
     $items = $names.Keys | Sort-Object | Select-Object -First 50
-    $tbComp.ItemsSource = $items
-    $tbComp.IsDropDownOpen = $items.Count -gt 0
+    $lbCompSuggest.ItemsSource = $items
+    $lbCompSuggest.Visibility = $(if ($items.Count -gt 0) { 'Visible' } else { 'Collapsed' })
   } catch {
-    $tbComp.ItemsSource = @(); $tbComp.IsDropDownOpen = $false }
+    $lbCompSuggest.ItemsSource = @(); $lbCompSuggest.Visibility = 'Collapsed' }
 }
 
 function Parse-WindowsLapsJson { param([string]$JsonText)
@@ -368,9 +368,14 @@ Start-Process -FilePath '$exe'
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
-          <ComboBox Grid.Column="1" x:Name="tbComp" IsEditable="True" IsTextSearchEnabled="False" MaxDropDownHeight="200"/>
-          <Button   Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+          <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
+          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
+          <ListBox  Grid.Row="1" Grid.Column="1" x:Name="lbCompSuggest" Visibility="Collapsed" MaxHeight="200" Margin="0,2,0,0"/>
         </Grid>
       </GroupBox>
 
@@ -432,6 +437,7 @@ $pbPass         = $window.FindName("pbPass")
 $tbServer       = $window.FindName("tbServer")
 $cbLdaps        = $window.FindName("cbLdaps")
 $tbComp         = $window.FindName("tbComp")
+$lbCompSuggest  = $window.FindName("lbCompSuggest")
 $btnGet         = $window.FindName("btnGet")
 $txtDetails     = $window.FindName("txtDetails")
 $spExpire       = $window.FindName("spExpire")
@@ -494,6 +500,23 @@ $window.Add_Closed({ Save-Prefs })
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true  })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false })
 $tbComp.Add_TextChanged({ Update-ComputerSuggestions $tbComp.Text })
+$lbCompSuggest.Add_MouseLeftButtonUp({
+    if ($lbCompSuggest.SelectedItem) {
+        $tbComp.Text = $lbCompSuggest.SelectedItem
+        $lbCompSuggest.Visibility = 'Collapsed'
+        $tbComp.Focus(); $tbComp.CaretIndex = $tbComp.Text.Length
+    }
+})
+$lbCompSuggest.Add_KeyDown({
+    if ($_.Key -eq 'Return' -and $lbCompSuggest.SelectedItem) {
+        $tbComp.Text = $lbCompSuggest.SelectedItem
+        $lbCompSuggest.Visibility = 'Collapsed'
+        $tbComp.Focus(); $tbComp.CaretIndex = $tbComp.Text.Length
+    } elseif ($_.Key -eq 'Escape') {
+        $lbCompSuggest.Visibility = 'Collapsed'
+        $tbComp.Focus()
+    }
+})
 
 # ---------- NEW: colorized clear-text rendering ----------
 # Pre-create brushes
@@ -618,6 +641,7 @@ if ($updateInfo) {
 
 $btnGet.Add_Click({
   try {
+    $lbCompSuggest.Visibility = 'Collapsed'
     $btnGet.IsEnabled = $false
     $window.Cursor = 'Wait'
 
@@ -666,6 +690,16 @@ $btnGet.Add_Click({
 })
 
 # Enter -> Retrieve
-$tbComp.Add_KeyDown({ if ($_.Key -eq 'Return') { $btnGet.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent))) } })
+$tbComp.Add_KeyDown({
+    if ($_.Key -eq 'Return') {
+        $lbCompSuggest.Visibility = 'Collapsed'
+        $btnGet.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+    } elseif ($_.Key -eq 'Down' -and $lbCompSuggest.Visibility -eq 'Visible' -and $lbCompSuggest.Items.Count -gt 0) {
+        $lbCompSuggest.Focus()
+        if ($lbCompSuggest.SelectedIndex -lt 0) { $lbCompSuggest.SelectedIndex = 0 }
+    } elseif ($_.Key -eq 'Escape') {
+        $lbCompSuggest.Visibility = 'Collapsed'
+    }
+})
 
 [void]$window.ShowDialog()
