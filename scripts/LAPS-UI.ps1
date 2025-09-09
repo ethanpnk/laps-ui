@@ -2,12 +2,12 @@
 # LDAP by default, optional LDAPS, modern dark UI, 20s countdown
 # Read-only "LAPS password" field + reliable green "cleared" message
 # Remember user & controller/domain (local JSON), update checker
-# NEW: colored clear-text password (letters / digits / symbols)
+# NEW: Cascadia Code font, expiration indicator, autocomplete & colorized password
 
 # --- Config ---
 $UseLdaps = $false
 $ClipboardAutoClearSeconds = 20
-$CurrentVersion = '1.0.4'
+$CurrentVersion = '1.0.5'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
@@ -102,6 +102,32 @@ function Find-ComputerEntry { param([System.DirectoryServices.DirectorySearcher]
   $v = Escape-LdapFilterValue $name
   $Searcher.Filter = "(&(objectCategory=computer)(|(sAMAccountName=$v$)(cn=$v)(dNSHostName=$v)))"
   $Searcher.FindOne() }
+
+function Update-ComputerSuggestions {
+  param([string]$Prefix)
+  if ([string]::IsNullOrWhiteSpace($Prefix) -or $Prefix.Length -lt 2) {
+    $tbComp.ItemsSource = @()
+    $tbComp.IsDropDownOpen = $false
+    return }
+  try {
+    $cred = $null
+    if (-not [string]::IsNullOrWhiteSpace($tbUser.Text) -and -not [string]::IsNullOrWhiteSpace($pbPass.Password)) {
+      $secure = ConvertTo-SecureString -String $pbPass.Password -AsPlainText -Force
+      $cred = New-Object System.Management.Automation.PSCredential ($tbUser.Text, $secure) }
+    $ds = Get-DirectorySearcher -Credential $cred -ServerOrDomain $tbServer.Text
+    $v = Escape-LdapFilterValue $Prefix
+    $ds.PageSize = 50
+    $ds.Filter = "(&(objectCategory=computer)(|(sAMAccountName=$v*)(cn=$v*)(dNSHostName=$v*)))"
+    $ds.PropertiesToLoad.Clear(); $ds.PropertiesToLoad.Add('sAMAccountName') | Out-Null
+    $res = $ds.FindAll()
+    $names = @{}
+    foreach ($r in $res) { $n = Get-FirstValue ($r.Properties['sAMAccountName']); if ($n) { $names[$n] = $true } }
+    $items = $names.Keys | Sort-Object | Select-Object -First 50
+    $tbComp.ItemsSource = $items
+    $tbComp.IsDropDownOpen = $items.Count -gt 0
+  } catch {
+    $tbComp.ItemsSource = @(); $tbComp.IsDropDownOpen = $false }
+}
 
 function Parse-WindowsLapsJson { param([string]$JsonText)
   if ([string]::IsNullOrWhiteSpace($JsonText)) { return $null }
@@ -235,7 +261,7 @@ Start-Process -FilePath '$exe'
       <Setter Property="BorderBrush" Value="#3E3E42"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="Padding" Value="4"/>
-      <Setter Property="FontFamily" Value="Consolas"/>
+      <Setter Property="FontFamily" Value="Cascadia Code,Consolas"/>
       <Setter Property="FontSize" Value="20"/>
       <Setter Property="IsReadOnly" Value="True"/>
     </Style>
@@ -343,15 +369,25 @@ Start-Process -FilePath '$exe'
             <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
-          <TextBox   Grid.Column="1" x:Name="tbComp"/>
-          <Button    Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
+          <ComboBox Grid.Column="1" x:Name="tbComp" IsEditable="True" IsTextSearchEnabled="False" MaxDropDownHeight="200"/>
+          <Button   Grid.Column="2" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
         </Grid>
       </GroupBox>
 
       <!-- Details -->
       <GroupBox Grid.Row="2" Header="Details">
-        <TextBox x:Name="txtDetails" Height="80" AcceptsReturn="True" IsReadOnly="True"
-                 VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/>
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <TextBox Grid.Row="0" x:Name="txtDetails" Height="80" AcceptsReturn="True" IsReadOnly="True"
+                   VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Code,Consolas" FontSize="12"/>
+          <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0" x:Name="spExpire" Visibility="Collapsed">
+            <Ellipse Width="10" Height="10" Margin="0,0,8,0" x:Name="ellExpire"/>
+            <TextBlock VerticalAlignment="Center" x:Name="lblExpire"/>
+          </StackPanel>
+        </Grid>
       </GroupBox>
 
       <!-- LAPS Password -->
@@ -367,7 +403,7 @@ Start-Process -FilePath '$exe'
           <!-- NEW: RichTextBox for colorized clear text -->
           <RichTextBox Grid.Row="0" Grid.Column="0" x:Name="rtbPwdOut" Visibility="Collapsed" Focusable="False" IsHitTestVisible="False"/>
 
-          <PasswordBox Grid.Row="0" Grid.Column="0" x:Name="pbPwdOut" FontFamily="Consolas" FontSize="20"
+          <PasswordBox Grid.Row="0" Grid.Column="0" x:Name="pbPwdOut" FontFamily="Cascadia Code,Consolas" FontSize="20"
                        IsHitTestVisible="False" Focusable="False"/>
 
           <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show" Margin="12,6,12,0" VerticalAlignment="Center"/>
@@ -398,6 +434,9 @@ $cbLdaps        = $window.FindName("cbLdaps")
 $tbComp         = $window.FindName("tbComp")
 $btnGet         = $window.FindName("btnGet")
 $txtDetails     = $window.FindName("txtDetails")
+$spExpire       = $window.FindName("spExpire")
+$ellExpire      = $window.FindName("ellExpire")
+$lblExpire      = $window.FindName("lblExpire")
 $rtbPwdOut      = $window.FindName("rtbPwdOut")   # NEW
 $pbPwdOut       = $window.FindName("pbPwdOut")
 $cbShow         = $window.FindName("cbShow")
@@ -454,6 +493,7 @@ $window.Add_Closed({ Save-Prefs })
 
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true  })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false })
+$tbComp.Add_TextChanged({ Update-ComputerSuggestions $tbComp.Text })
 
 # ---------- NEW: colorized clear-text rendering ----------
 # Pre-create brushes
@@ -484,6 +524,22 @@ function Update-PasswordDisplay([string]$pwd) {
   $doc.Blocks.Clear()
   $doc.Blocks.Add($p) | Out-Null
   $rtbPwdOut.Document = $doc
+}
+
+function Update-ExpirationIndicator([nullable[DateTime]]$exp) {
+  if ($null -eq $exp) { $spExpire.Visibility = 'Collapsed'; return }
+  $now = Get-Date
+  $spExpire.Visibility = 'Visible'
+  if ($exp -lt $now) {
+    $ellExpire.Fill = 'Red'
+    $lblExpire.Text = "Expired on $exp"
+  } elseif (($exp - $now).TotalDays -le 2) {
+    $ellExpire.Fill = 'Orange'
+    $lblExpire.Text = "Expires soon ($exp)"
+  } else {
+    $ellExpire.Fill = 'LimeGreen'
+    $lblExpire.Text = "Expires on $exp"
+  }
 }
 
 # Show/Hide clear text
@@ -590,6 +646,7 @@ $btnGet.Add_Click({
       if ($item.Expires) { $lines += ("Expiration : {0}" -f $item.Expires) }
       if ($item.DN)      { $lines += ("DN         : {0}" -f $item.DN) }
       $txtDetails.Text = ($lines -join [Environment]::NewLine)
+      Update-ExpirationIndicator $item.Expires
     } else {
       $dn = Get-FirstValue (Get-PropValueCI $res.Properties 'distinguishedName')
       $txtDetails.Text = "No readable LAPS attribute on this computer.`r`nDN: $dn`r`n- LAPS not applied`r`n- No read permission`r`n- Rotation not yet performed."
@@ -597,9 +654,11 @@ $btnGet.Add_Click({
       $pbPwdOut.Password = ""
       if ($cbShow.IsChecked) { Update-PasswordDisplay "" }
       $btnCopy.IsEnabled = $false
+      Update-ExpirationIndicator $null
     }
   } catch {
     $txtDetails.Text = "Error: $($_.Exception.Message)"
+    Update-ExpirationIndicator $null
   } finally {
     $window.Cursor = 'Arrow'
     $btnGet.IsEnabled = $true
