@@ -7,7 +7,7 @@
 # --- Config ---
 $UseLdaps = $false
 $ClipboardAutoClearSeconds = 20
-$CurrentVersion = '1.0.5'
+$CurrentVersion = '1.0.4'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
@@ -332,7 +332,7 @@ Start-Process -FilePath '$exe'
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <GroupBox Grid.Column="0" Header="Credentials" Margin="0,0,8,14">
+        <GroupBox Grid.Column="0" Header="Credentials" Margin="0,0,8,0">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
@@ -348,7 +348,7 @@ Start-Process -FilePath '$exe'
           </Grid>
         </GroupBox>
 
-        <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,14">
+        <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,0">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
