@@ -30,6 +30,8 @@
 - 🌐 **LDAP** by default or **LDAPS (TLS 636)** through a checkbox.
 - 👁️ **Show/Hide** the password; **Copy** with **countdown** (20 s) and automatic clipboard purge.
 - 💾 **"Remember user and domain"** option (saves ID and AD, encrypted in `%LOCALAPPDATA%\LAPS-UI\prefs.json`).
+- 🕘 **History** of retrieved computers, stored encrypted and accessible via a dedicated icon.
+- 🧠 **Autocomplete suggestions** for computer names with adaptive window sizing.
 - ⚠️ **No password storage** on disk. No AD module required.
 
 ---
