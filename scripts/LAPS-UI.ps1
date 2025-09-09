@@ -105,7 +105,7 @@ function Find-ComputerEntry { param([System.DirectoryServices.DirectorySearcher]
 
 function Update-ComputerSuggestions {
   param([string]$Prefix)
-  if ([string]::IsNullOrWhiteSpace($Prefix) -or $Prefix.Length -lt 3) {
+  if ([string]::IsNullOrWhiteSpace($Prefix) -or $Prefix.Length -lt 2) {
     $lbCompSuggest.ItemsSource = @()
     $popCompSuggest.IsOpen = $false
     return }
@@ -428,9 +428,8 @@ Start-Process -FilePath '$exe'
         <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
     </Grid>
-  </Grid>
 </Window>
-"@
+"@ 
 
 # ---------- Build UI ----------
 $reader = (New-Object System.Xml.XmlNodeReader $xaml)
