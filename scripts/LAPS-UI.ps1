@@ -7,7 +7,7 @@
 # --- Config ---
 $UseLdaps = $false
 $ClipboardAutoClearSeconds = 20
-$CurrentVersion = '1.0.4'
+$CurrentVersion = '1.0.5'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
@@ -575,6 +575,10 @@ function Load-Prefs {
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
+$tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+$pbPass.Add_PasswordChanged({
+    $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+})
 $cbRememberUser.Add_Checked({ Save-Prefs })
 $cbRememberUser.Add_Unchecked({ Save-Prefs })
 $tbUser.Add_LostFocus({ if ($cbRememberUser.IsChecked) { Save-Prefs } })
