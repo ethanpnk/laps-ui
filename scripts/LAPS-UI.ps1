@@ -244,6 +244,14 @@ Start-Process -FilePath '$exe'
       </Style.Triggers>
     </Style>
 
+    <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource AccentButton}">
+      <Setter Property="Width"    Value="32"/>
+      <Setter Property="Height"   Value="32"/>
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Padding"  Value="0"/>
+    </Style>
+
     <Style TargetType="TextBox">
       <Setter Property="Background" Value="#2D2D2D"/>
       <Setter Property="Foreground" Value="#EEEEEE"/>
@@ -380,7 +388,7 @@ Start-Process -FilePath '$exe'
           </Grid.RowDefinitions>
           <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
-          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Width="32" Margin="12,0,0,0" ToolTip="History"/>
+          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource IconButton}" Margin="12,0,0,0" ToolTip="History"/>
           <Button   Grid.Row="0" Grid.Column="3" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
           <Popup    x:Name="popCompSuggest" PlacementTarget="{Binding ElementName=tbComp}" Placement="Bottom" StaysOpen="False">
             <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
