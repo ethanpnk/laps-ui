@@ -380,7 +380,7 @@ Start-Process -FilePath '$exe'
           </Grid.RowDefinitions>
           <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
-          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="History" Margin="12,0,0,0"/>
+          <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Width="32" Margin="12,0,0,0" ToolTip="History"/>
           <Button   Grid.Row="0" Grid.Column="3" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
           <Popup    x:Name="popCompSuggest" PlacementTarget="{Binding ElementName=tbComp}" Placement="Bottom" StaysOpen="False">
             <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
@@ -486,7 +486,18 @@ New-Item -Path $PrefDir -ItemType Directory -Force | Out-Null
 $script:Prefs = @{}
 
 function Protect-String { param([string]$Text) if ([string]::IsNullOrWhiteSpace($Text)) { return $null } $sec = ConvertTo-SecureString $Text -AsPlainText -Force; ConvertFrom-SecureString $sec }
-function Unprotect-String { param([string]$Cipher) if ([string]::IsNullOrWhiteSpace($Cipher)) { return $null } try { $sec = ConvertTo-SecureString $Cipher; [Runtime.InteropServices.Marshal]::PtrToStringUni([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)) } catch { $Cipher } }
+function Unprotect-String {
+  param([string]$Cipher)
+  if ([string]::IsNullOrWhiteSpace($Cipher)) { return $null }
+  try {
+    $sec = ConvertTo-SecureString $Cipher -ErrorAction Stop
+    [Runtime.InteropServices.Marshal]::PtrToStringUni(
+      [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+    )
+  } catch {
+    $Cipher
+  }
+}
 
 function Save-Prefs {
   $secs = 0
