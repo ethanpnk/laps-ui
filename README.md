@@ -32,6 +32,7 @@
 - 💾 **"Remember user and domain"** option (saves ID and AD, encrypted in `%LOCALAPPDATA%\LAPS-UI\prefs.json`).
 - 🕘 **History** of retrieved computers, stored encrypted and accessible via a dedicated icon.
 - 🧠 **Autocomplete suggestions** for computer names with adaptive window sizing.
+- 🚫 **Computer name field** disabled until a **user password** is entered.
 - ⚠️ **No password storage** on disk. No AD module required.
 
 ---
@@ -114,4 +115,16 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 
 - **Windows PowerShell 5.1**
 - Not designed for **PowerShell 7** (WPF/WinRT differs)
+
+---
+
+## 📝 Release Notes
+
+```markdown
+## Summary
+- disable computer name field until a user password is entered
+
+## Testing
+- `pwsh -NoLogo -NoProfile -File scripts/LAPS-UI.ps1`
+```
 
