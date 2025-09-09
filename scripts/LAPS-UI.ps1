@@ -214,14 +214,18 @@ function Start-AppUpdate {
       if ($h -ne $Info.Sha256) { throw "SHA256 mismatch" }
     }
     $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-    $script = @"
-Start-Sleep -Seconds 1
-Copy-Item -Path '$tmp' -Destination '$exe' -Force
-Start-Process -FilePath '$exe'
-"@
+    $pid = [System.Diagnostics.Process]::GetCurrentProcess().Id
+    $script = @'
+param([string]$Tmp,[string]$Exe,[int]$Pid)
+while (Get-Process -Id $Pid -ErrorAction SilentlyContinue) {
+  Start-Sleep -Milliseconds 200
+}
+Copy-Item -Path $Tmp -Destination $Exe -Force
+Start-Process -FilePath $Exe
+'@
     $ps = Join-Path ([IO.Path]::GetTempPath()) 'laps-ui-update.ps1'
     Set-Content -Path $ps -Value $script -Encoding UTF8
-    Start-Process -FilePath 'powershell' -ArgumentList '-ExecutionPolicy Bypass','-File', $ps -Verb RunAs
+    Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$ps,'-Tmp',$tmp,'-Exe',$exe,'-Pid',$pid -WindowStyle Hidden
     $Window.Close()
   } catch {
     [System.Windows.MessageBox]::Show("Update failed: $($_.Exception.Message)", 'Update', 'OK', 'Error') | Out-Null
