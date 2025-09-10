@@ -352,9 +352,9 @@ Start-Process -FilePath $Exe
     </Style>
   </Window.Resources>
 
-  <TabControl Margin="16" Background="#1E1E1E" BorderThickness="0">
+  <TabControl Margin="16" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}" BorderThickness="0">
     <TabItem Header="Main">
-      <Grid Background="#1E1E1E">
+      <Grid Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
           <RowDefinition Height="Auto"/>
@@ -466,7 +466,7 @@ Start-Process -FilePath $Exe
     </Grid>
   </TabItem>
   <TabItem Header="Settings">
-    <StackPanel Margin="10" Background="#1E1E1E">
+    <StackPanel Margin="10" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
       <GroupBox Header="Security">
         <StackPanel>
           <CheckBox x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="0,0,0,8"/>
@@ -638,7 +638,7 @@ function Apply-Theme {
     $window.Foreground = [Windows.Media.Brushes]::Black
   } else {
     $window.Resources = $script:DarkResources
-    $window.Background = [Windows.Media.Brushes]::Black
+    $window.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString('#1E1E1E'))
     $window.Foreground = [Windows.Media.Brushes]::White
   }
 }
@@ -718,7 +718,7 @@ function Save-Prefs {
     ClipboardSeconds    = $script:ClipboardAutoClearSeconds
     AutoUpdate          = [bool]$cbAutoUpdate.IsChecked
     ConfirmCopy         = [bool]$cbConfirmCopy.IsChecked
-    Theme               = $cmbTheme.Text
+    Theme               = $cmbTheme.SelectedItem.Content
     Language            = $cmbLanguage.Text
     History             = $history
     IgnoreVersion       = $ignore
@@ -739,7 +739,7 @@ function Load-Prefs {
       if ($loaded.ClipboardSeconds) { $script:ClipboardAutoClearSeconds = [int]$loaded.ClipboardSeconds }
       if ($null -ne $loaded.AutoUpdate) { $cbAutoUpdate.IsChecked = [bool]$loaded.AutoUpdate }
       if ($null -ne $loaded.ConfirmCopy) { $cbConfirmCopy.IsChecked = [bool]$loaded.ConfirmCopy }
-      if ($loaded.Theme) { $cmbTheme.Text = $loaded.Theme }
+      if ($loaded.Theme) { $cmbTheme.SelectedItem = $cmbTheme.Items | Where-Object { $_.Content -eq $loaded.Theme } }
       if ($loaded.Language) { $cmbLanguage.Text = $loaded.Language }
       $hist = @()
       if ($loaded.History -is [System.Collections.IEnumerable]) {
@@ -757,7 +757,7 @@ function Load-Prefs {
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
-Apply-Theme $cmbTheme.Text
+Apply-Theme $cmbTheme.SelectedItem.Content
 $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
 $pbPass.Add_PasswordChanged({
     $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
@@ -779,7 +779,7 @@ $cbAutoUpdate.Add_Checked({ Save-Prefs })
 $cbAutoUpdate.Add_Unchecked({ Save-Prefs })
 $cbConfirmCopy.Add_Checked({ Save-Prefs })
 $cbConfirmCopy.Add_Unchecked({ Save-Prefs })
-$cmbTheme.Add_SelectionChanged({ Apply-Theme $cmbTheme.Text; Save-Prefs })
+$cmbTheme.Add_SelectionChanged({ Apply-Theme $cmbTheme.SelectedItem.Content; Save-Prefs })
 $cmbLanguage.Add_SelectionChanged({ Save-Prefs })
 $tbComp.Add_TextChanged({
     Update-ComputerSuggestions $tbComp.Text
