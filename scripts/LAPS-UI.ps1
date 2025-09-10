@@ -375,7 +375,7 @@ Start-Process -FilePath $Exe
           <!-- Barre d'onglets -->
           <TabPanel x:Name="HeaderPanel"
                     IsItemsHost="True"
-                    Margin="12,12,12,0"
+                    Margin="12,12,20,0"
                     KeyboardNavigation.TabIndex="1"
                     Panel.ZIndex="1"
                     Background="{TemplateBinding Background}"/>
@@ -676,7 +676,7 @@ $lightThemeXaml = @"
 <Style TargetType="TabItem">
   <Setter Property="Foreground" Value="#EEEEEE"/>
   <Setter Property="Padding" Value="14,8"/>
-  <Setter Property="Margin" Value="0,0,8,0"/>
+  <Setter Property="Margin" Value="0"/>
   <Setter Property="Cursor" Value="Hand"/>
   <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
   <Setter Property="Template">
