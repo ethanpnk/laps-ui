@@ -360,33 +360,44 @@ Start-Process -FilePath $Exe
       <Setter Property="Margin" Value="0,4,0,0"/>
     </Style>
 
-    <Style TargetType="TabItem">
-      <Setter Property="FontSize" Value="14"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Padding" Value="12,6"/>
-      <Setter Property="Margin" Value="0,0,4,0"/>
-      <Setter Property="Foreground" Value="#EEEEEE"/>
-      <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="TabItem">
-            <Border x:Name="TabBorder" Background="#2D2D2D" CornerRadius="4" Padding="{TemplateBinding Padding}">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsSelected" Value="True">
-                <Setter TargetName="TabBorder" Property="Background" Value="#0A84FF"/>
-                <Setter Property="Foreground" Value="White"/>
-              </Trigger>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="TabBorder" Property="Background" Value="#3E3E42"/>
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
+<Style TargetType="TabControl">
+  <Setter Property="Background" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"/>
+  <Setter Property="BorderThickness" Value="0"/>
+  <Setter Property="Template">
+    <Setter.Value>
+      <ControlTemplate TargetType="TabControl">
+        <Grid SnapsToDevicePixels="True">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+
+          <!-- Barre d'onglets -->
+          <TabPanel x:Name="HeaderPanel"
+                    IsItemsHost="True"
+                    Margin="12,12,12,0"
+                    KeyboardNavigation.TabIndex="1"
+                    Panel.ZIndex="1"
+                    Background="{TemplateBinding Background}"/>
+
+          <!-- Zone de contenu -->
+          <Border Grid.Row="1"
+                  Margin="12"
+                  Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"
+                  CornerRadius="10"
+                  BorderBrush="#3E3E42"
+                  BorderThickness="1"
+                  Padding="12">
+            <ContentPresenter x:Name="PART_SelectedContentHost"
+                              Margin="0"
+                              ContentSource="SelectedContent"
+                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+          </Border>
+        </Grid>
+      </ControlTemplate>
+    </Setter.Value>
+  </Setter>
+</Style>
   </Window.Resources>
 
   <TabControl Margin="16" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}" BorderThickness="0">
@@ -662,33 +673,51 @@ $lightThemeXaml = @"
     <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="Margin" Value="0,4,0,0"/>
   </Style>
-  <Style TargetType="TabItem">
-    <Setter Property="FontSize" Value="14"/>
-    <Setter Property="FontWeight" Value="SemiBold"/>
-    <Setter Property="Padding" Value="12,6"/>
-    <Setter Property="Margin" Value="0,0,4,0"/>
-    <Setter Property="Foreground" Value="#1E1E1E"/>
-    <Setter Property="BorderThickness" Value="0"/>
-    <Setter Property="Cursor" Value="Hand"/>
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="TabItem">
-          <Border x:Name="TabBorder" Background="#E5E5E5" CornerRadius="4" Padding="{TemplateBinding Padding}">
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
-          <ControlTemplate.Triggers>
-            <Trigger Property="IsSelected" Value="True">
-              <Setter TargetName="TabBorder" Property="Background" Value="#0A84FF"/>
-              <Setter Property="Foreground" Value="White"/>
-            </Trigger>
-            <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="TabBorder" Property="Background" Value="#DDDDDD"/>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
-  </Style>
+<Style TargetType="TabItem">
+  <Setter Property="Foreground" Value="#EEEEEE"/>
+  <Setter Property="Padding" Value="14,8"/>
+  <Setter Property="Margin" Value="0,0,8,0"/>
+  <Setter Property="Cursor" Value="Hand"/>
+  <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+  <Setter Property="Template">
+    <Setter.Value>
+      <ControlTemplate TargetType="TabItem">
+        <Border x:Name="Bd"
+                Background="#2D2D2D"
+                CornerRadius="8"
+                Padding="{TemplateBinding Padding}"
+                SnapsToDevicePixels="True">
+          <!-- IMPORTANT : on rend seulement le Header -->
+          <ContentPresenter ContentSource="Header"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"/>
+        </Border>
+        <ControlTemplate.Triggers>
+          <!-- Hover -->
+          <Trigger Property="IsMouseOver" Value="True">
+            <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+          </Trigger>
+
+          <!-- Désactivé -->
+          <Trigger Property="IsEnabled" Value="False">
+            <Setter Property="Opacity" Value="0.5"/>
+          </Trigger>
+
+          <!-- Sélectionné (PLACÉ APRÈS pour prendre le dessus sur le hover) -->
+          <Trigger Property="IsSelected" Value="True">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter TargetName="Bd" Property="Background" Value="#0A84FF"/>
+            <Setter TargetName="Bd" Property="Effect">
+              <Setter.Value>
+                <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.35"/>
+              </Setter.Value>
+            </Setter>
+          </Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate>
+    </Setter.Value>
+  </Setter>
+</Style>
 </ResourceDictionary>
 "@
 $lightReader = New-Object System.Xml.XmlNodeReader ([xml]$lightThemeXaml)
