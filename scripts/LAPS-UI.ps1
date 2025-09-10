@@ -351,9 +351,9 @@ Start-Process -FilePath $Exe
     </Style>
   </Window.Resources>
 
-  <TabControl Margin="16">
+  <TabControl Margin="16" Background="#1E1E1E" BorderThickness="0">
     <TabItem Header="Main">
-      <Grid>
+      <Grid Background="#1E1E1E">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
           <RowDefinition Height="Auto"/>
@@ -465,7 +465,7 @@ Start-Process -FilePath $Exe
     </Grid>
   </TabItem>
   <TabItem Header="Settings">
-    <StackPanel Margin="10">
+    <StackPanel Margin="10" Background="#1E1E1E">
       <GroupBox Header="Security">
         <StackPanel>
           <CheckBox x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="0,0,0,8"/>
