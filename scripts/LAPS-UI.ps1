@@ -13,6 +13,15 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
 Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null
 
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class DwmApi {
+  [DllImport("dwmapi.dll")]
+  public static extern int DwmSetWindowAttribute(IntPtr hWnd, int attr, ref int attrValue, int attrSize);
+}
+"@
+
 # ---------- LDAP helpers ----------
 function Convert-FileTime { param([object]$Value)
   if (-not $Value) { return $null }
@@ -350,11 +359,90 @@ Start-Process -FilePath $Exe
       <Setter Property="Foreground" Value="#E0E0E0"/>
       <Setter Property="Margin" Value="0,4,0,0"/>
     </Style>
+
+    <Style TargetType="TabItem">
+      <Setter Property="Foreground" Value="#EEEEEE"/>
+      <Setter Property="Padding" Value="14,8"/>
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border x:Name="Bd"
+                    Background="#2D2D2D"
+                    CornerRadius="8"
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter ContentSource="Header"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter TargetName="Bd" Property="Background" Value="#0A84FF"/>
+                <Setter TargetName="Bd" Property="Effect">
+                  <Setter.Value>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.35"/>
+                  </Setter.Value>
+                </Setter>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+<Style TargetType="TabControl">
+  <Setter Property="Background" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"/>
+  <Setter Property="BorderThickness" Value="0"/>
+  <Setter Property="Template">
+    <Setter.Value>
+      <ControlTemplate TargetType="TabControl">
+        <Grid SnapsToDevicePixels="True">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+
+          <!-- Barre d'onglets -->
+          <TabPanel x:Name="HeaderPanel"
+                    IsItemsHost="True"
+                    Margin="12,12,20,0"
+                    KeyboardNavigation.TabIndex="1"
+                    Panel.ZIndex="1"
+                    Background="{TemplateBinding Background}"/>
+
+          <!-- Zone de contenu -->
+          <Border Grid.Row="1"
+                  Margin="12"
+                  Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"
+                  CornerRadius="10"
+                  BorderBrush="#3E3E42"
+                  BorderThickness="1"
+                  Padding="12">
+            <ContentPresenter x:Name="PART_SelectedContentHost"
+                              Margin="0"
+                              ContentSource="SelectedContent"
+                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+          </Border>
+        </Grid>
+      </ControlTemplate>
+    </Setter.Value>
+  </Setter>
+</Style>
   </Window.Resources>
 
-  <TabControl Margin="16" Background="#1E1E1E" BorderThickness="0">
+  <TabControl Margin="16" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}" BorderThickness="0">
     <TabItem Header="Main">
-      <Grid Background="#1E1E1E">
+      <Grid Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
           <RowDefinition Height="Auto"/>
@@ -466,7 +554,7 @@ Start-Process -FilePath $Exe
     </Grid>
   </TabItem>
   <TabItem Header="Settings">
-    <StackPanel Margin="10" Background="#1E1E1E">
+    <StackPanel Margin="10" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
       <GroupBox Header="Security">
         <StackPanel>
           <CheckBox x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="0,0,0,8"/>
@@ -625,6 +713,85 @@ $lightThemeXaml = @"
     <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="Margin" Value="0,4,0,0"/>
   </Style>
+  <Style TargetType="TabControl">
+    <Setter Property="Background" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TabControl">
+          <Grid SnapsToDevicePixels="True">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TabPanel x:Name="HeaderPanel"
+                      IsItemsHost="True"
+                      Margin="12,12,20,0"
+                      KeyboardNavigation.TabIndex="1"
+                      Panel.ZIndex="1"
+                      Background="{TemplateBinding Background}"/>
+
+            <Border Grid.Row="1"
+                    Margin="12"
+                    Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"
+                    CornerRadius="10"
+                    BorderBrush="#CCCCCC"
+                    BorderThickness="1"
+                    Padding="12">
+              <ContentPresenter x:Name="PART_SelectedContentHost"
+                                Margin="0"
+                                ContentSource="SelectedContent"
+                                SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+            </Border>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="TabItem">
+    <Setter Property="Foreground" Value="#333333"/>
+    <Setter Property="Padding" Value="14,8"/>
+    <Setter Property="Margin" Value="0"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TabItem">
+          <Border x:Name="Bd"
+                  Background="#F0F0F0"
+                  BorderBrush="#CCCCCC"
+                  BorderThickness="1"
+                  CornerRadius="8"
+                  Padding="{TemplateBinding Padding}"
+                  SnapsToDevicePixels="True">
+            <ContentPresenter ContentSource="Header"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.5"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter Property="Foreground" Value="White"/>
+              <Setter TargetName="Bd" Property="Background" Value="#0A84FF"/>
+              <Setter TargetName="Bd" Property="BorderBrush" Value="#0A84FF"/>
+              <Setter TargetName="Bd" Property="Effect">
+                <Setter.Value>
+                  <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.35"/>
+                </Setter.Value>
+              </Setter>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 </ResourceDictionary>
 "@
 $lightReader = New-Object System.Xml.XmlNodeReader ([xml]$lightThemeXaml)
@@ -636,11 +803,18 @@ function Apply-Theme {
     $window.Resources = $script:LightResources
     $window.Background = [Windows.Media.Brushes]::White
     $window.Foreground = [Windows.Media.Brushes]::Black
+    $useDark = 0
   } else {
     $window.Resources = $script:DarkResources
-    $window.Background = [Windows.Media.Brushes]::Black
+    $window.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString('#1E1E1E'))
     $window.Foreground = [Windows.Media.Brushes]::White
+    $useDark = 1
   }
+
+  $helper = New-Object System.Windows.Interop.WindowInteropHelper($window)
+  $hWnd = $helper.EnsureHandle()
+  [DwmApi]::DwmSetWindowAttribute($hWnd, 19, [ref]$useDark, 4) | Out-Null
+  [DwmApi]::DwmSetWindowAttribute($hWnd, 20, [ref]$useDark, 4) | Out-Null
 }
 
 # Controls
@@ -718,7 +892,7 @@ function Save-Prefs {
     ClipboardSeconds    = $script:ClipboardAutoClearSeconds
     AutoUpdate          = [bool]$cbAutoUpdate.IsChecked
     ConfirmCopy         = [bool]$cbConfirmCopy.IsChecked
-    Theme               = $cmbTheme.Text
+    Theme               = $cmbTheme.SelectedItem.Content
     Language            = $cmbLanguage.Text
     History             = $history
     IgnoreVersion       = $ignore
@@ -739,7 +913,7 @@ function Load-Prefs {
       if ($loaded.ClipboardSeconds) { $script:ClipboardAutoClearSeconds = [int]$loaded.ClipboardSeconds }
       if ($null -ne $loaded.AutoUpdate) { $cbAutoUpdate.IsChecked = [bool]$loaded.AutoUpdate }
       if ($null -ne $loaded.ConfirmCopy) { $cbConfirmCopy.IsChecked = [bool]$loaded.ConfirmCopy }
-      if ($loaded.Theme) { $cmbTheme.Text = $loaded.Theme }
+      if ($loaded.Theme) { $cmbTheme.SelectedItem = $cmbTheme.Items | Where-Object { $_.Content -eq $loaded.Theme } }
       if ($loaded.Language) { $cmbLanguage.Text = $loaded.Language }
       $hist = @()
       if ($loaded.History -is [System.Collections.IEnumerable]) {
@@ -757,7 +931,7 @@ function Load-Prefs {
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
-Apply-Theme $cmbTheme.Text
+Apply-Theme $cmbTheme.SelectedItem.Content
 $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
 $pbPass.Add_PasswordChanged({
     $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
@@ -779,7 +953,7 @@ $cbAutoUpdate.Add_Checked({ Save-Prefs })
 $cbAutoUpdate.Add_Unchecked({ Save-Prefs })
 $cbConfirmCopy.Add_Checked({ Save-Prefs })
 $cbConfirmCopy.Add_Unchecked({ Save-Prefs })
-$cmbTheme.Add_SelectionChanged({ Apply-Theme $cmbTheme.Text; Save-Prefs })
+$cmbTheme.Add_SelectionChanged({ Apply-Theme $cmbTheme.SelectedItem.Content; Save-Prefs })
 $cmbLanguage.Add_SelectionChanged({ Save-Prefs })
 $tbComp.Add_TextChanged({
     Update-ComputerSuggestions $tbComp.Text
