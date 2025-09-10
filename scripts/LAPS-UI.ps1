@@ -13,6 +13,15 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
 Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null
 
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class DwmApi {
+  [DllImport("dwmapi.dll")]
+  public static extern int DwmSetWindowAttribute(IntPtr hWnd, int attr, ref int attrValue, int attrSize);
+}
+"@
+
 # ---------- LDAP helpers ----------
 function Convert-FileTime { param([object]$Value)
   if (-not $Value) { return $null }
@@ -350,6 +359,35 @@ Start-Process -FilePath $Exe
       <Setter Property="Foreground" Value="#E0E0E0"/>
       <Setter Property="Margin" Value="0,4,0,0"/>
     </Style>
+
+    <Style TargetType="TabItem">
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="Margin" Value="0,0,4,0"/>
+      <Setter Property="Background" Value="#2D2D2D"/>
+      <Setter Property="Foreground" Value="#EEEEEE"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <Setter Property="Background" Value="#0A84FF"/>
+          <Setter Property="Foreground" Value="White"/>
+        </Trigger>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="#3E3E42"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
   </Window.Resources>
 
   <TabControl Margin="16" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}" BorderThickness="0">
@@ -625,6 +663,34 @@ $lightThemeXaml = @"
     <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="Margin" Value="0,4,0,0"/>
   </Style>
+  <Style TargetType="TabItem">
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Padding" Value="12,6"/>
+    <Setter Property="Margin" Value="0,0,4,0"/>
+    <Setter Property="Background" Value="#E5E5E5"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TabItem">
+          <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsSelected" Value="True">
+        <Setter Property="Background" Value="#0A84FF"/>
+        <Setter Property="Foreground" Value="White"/>
+      </Trigger>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Background" Value="#DDDDDD"/>
+      </Trigger>
+    </Style.Triggers>
+  </Style>
 </ResourceDictionary>
 "@
 $lightReader = New-Object System.Xml.XmlNodeReader ([xml]$lightThemeXaml)
@@ -636,11 +702,18 @@ function Apply-Theme {
     $window.Resources = $script:LightResources
     $window.Background = [Windows.Media.Brushes]::White
     $window.Foreground = [Windows.Media.Brushes]::Black
+    $useDark = 0
   } else {
     $window.Resources = $script:DarkResources
     $window.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString('#1E1E1E'))
     $window.Foreground = [Windows.Media.Brushes]::White
+    $useDark = 1
   }
+
+  $helper = New-Object System.Windows.Interop.WindowInteropHelper($window)
+  $hWnd = $helper.EnsureHandle()
+  [DwmApi]::DwmSetWindowAttribute($hWnd, 19, [ref]$useDark, 4) | Out-Null
+  [DwmApi]::DwmSetWindowAttribute($hWnd, 20, [ref]$useDark, 4) | Out-Null
 }
 
 # Controls
