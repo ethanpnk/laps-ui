@@ -238,7 +238,7 @@ Start-Process -FilePath $Exe
         Title="LAPS UI (Windows &amp; Legacy) - v$CurrentVersion"
         Width="1000" MinWidth="1000" SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
-        Background="#000000" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
+        Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
   <Window.Resources>
     <SolidColorBrush x:Key="LabelBrush" Color="#BEBEBE"/>
     <Style x:Key="AccentButton" TargetType="Button">
@@ -553,7 +553,7 @@ $lightThemeXaml = @"
 
   <Style TargetType="TextBox">
     <Setter Property="Background" Value="#FFFFFF"/>
-    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="BorderBrush" Value="#CCCCCC"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Padding" Value="8,6"/>
@@ -571,7 +571,7 @@ $lightThemeXaml = @"
 
   <Style TargetType="RichTextBox">
     <Setter Property="Background" Value="#FFFFFF"/>
-    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="BorderBrush" Value="#CCCCCC"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Padding" Value="4"/>
@@ -582,7 +582,7 @@ $lightThemeXaml = @"
 
   <Style TargetType="PasswordBox">
     <Setter Property="Background" Value="#FFFFFF"/>
-    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="BorderBrush" Value="#CCCCCC"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Padding" Value="8,6"/>
@@ -599,7 +599,7 @@ $lightThemeXaml = @"
   </Style>
 
   <Style TargetType="GroupBox">
-    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="BorderBrush" Value="#CCCCCC"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Padding" Value="12"/>
@@ -622,7 +622,7 @@ $lightThemeXaml = @"
   </Style>
 
   <Style TargetType="CheckBox">
-    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="Margin" Value="0,4,0,0"/>
   </Style>
 </ResourceDictionary>
