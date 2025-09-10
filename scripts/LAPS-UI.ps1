@@ -238,8 +238,9 @@ Start-Process -FilePath $Exe
         Title="LAPS UI (Windows &amp; Legacy) - v$CurrentVersion"
         Width="1000" MinWidth="1000" SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
-        Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
+        Background="#000000" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
   <Window.Resources>
+    <SolidColorBrush x:Key="LabelBrush" Color="#BEBEBE"/>
     <Style x:Key="AccentButton" TargetType="Button">
       <Setter Property="Background" Value="#0A84FF"/>
       <Setter Property="Foreground" Value="White"/>
@@ -335,7 +336,7 @@ Start-Process -FilePath $Exe
                     BorderThickness="{TemplateBinding BorderThickness}" Margin="0,8,0,0">
               <DockPanel LastChildFill="True">
                 <Border DockPanel.Dock="Top" Background="#2B2B2B" Padding="8,4" CornerRadius="8,8,0,0">
-                  <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="#BEBEBE"/>
+                  <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="{DynamicResource LabelBrush}"/>
                 </Border>
                 <ContentPresenter Margin="{TemplateBinding Padding}"/>
               </DockPanel>
@@ -377,9 +378,9 @@ Start-Process -FilePath $Exe
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbUser"/>
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
             <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="0,8,0,0"/>
           </Grid>
         </GroupBox>
@@ -392,7 +393,7 @@ Start-Process -FilePath $Exe
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
           </Grid>
         </GroupBox>
@@ -407,7 +408,7 @@ Start-Process -FilePath $Exe
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
-          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource IconButton}" Margin="12,0,0,0" ToolTip="History"/>
           <Button   Grid.Row="0" Grid.Column="3" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
@@ -471,7 +472,7 @@ Start-Process -FilePath $Exe
           <CheckBox x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="0,0,0,8"/>
           <CheckBox x:Name="cbClipboardAutoClear" Content="Enable clipboard auto-clear" IsChecked="True" Margin="0,0,0,8"/>
           <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
             <TextBox x:Name="tbClipboardSecs" Width="50"/>
           </StackPanel>
         </StackPanel>
@@ -487,14 +488,14 @@ Start-Process -FilePath $Exe
       <GroupBox Header="Appearance">
         <StackPanel>
           <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Theme" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
-            <ComboBox x:Name="cmbTheme" Width="120">
+            <TextBlock Text="Theme" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
+            <ComboBox x:Name="cmbTheme" Width="120" SelectedIndex="0">
               <ComboBoxItem Content="Dark"/>
               <ComboBoxItem Content="Light"/>
             </ComboBox>
           </StackPanel>
           <StackPanel Orientation="Horizontal">
-            <TextBlock Text="Language" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Text="Language" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
             <ComboBox x:Name="cmbLanguage" Width="120">
               <ComboBoxItem Content="English"/>
               <ComboBoxItem Content="French"/>
@@ -511,6 +512,136 @@ Start-Process -FilePath $Exe
 # ---------- Build UI ----------
 $reader = (New-Object System.Xml.XmlNodeReader $xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
+
+$script:DarkResources = $window.Resources
+$lightThemeXaml = @"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="LabelBrush" Color="#333333"/>
+  <Style x:Key="AccentButton" TargetType="Button">
+    <Setter Property="Background" Value="#0A84FF"/>
+    <Setter Property="Foreground" Value="White"/>
+    <Setter Property="FontSize"   Value="14"/>
+    <Setter Property="MinHeight"  Value="36"/>
+    <Setter Property="MinWidth"   Value="110"/>
+    <Setter Property="Padding"    Value="16,10"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="HorizontalAlignment" Value="Right"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border Background="{TemplateBinding Background}"
+                  CornerRadius="6" Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#0C60C0"/></Trigger>
+      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource AccentButton}">
+    <Setter Property="Width"    Value="32"/>
+    <Setter Property="Height"   Value="32"/>
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="MinHeight" Value="0"/>
+    <Setter Property="Padding"  Value="0"/>
+  </Style>
+
+  <Style TargetType="TextBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+            <ScrollViewer x:Name="PART_ContentHost"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="RichTextBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="FontFamily" Value="Cascadia Code,Consolas"/>
+    <Setter Property="FontSize" Value="20"/>
+    <Setter Property="IsReadOnly" Value="True"/>
+  </Style>
+
+  <Style TargetType="PasswordBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="PasswordBox">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+            <ScrollViewer x:Name="PART_ContentHost"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="GroupBox">
+    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="12"/>
+    <Setter Property="Margin" Value="0,0,0,14"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type GroupBox}">
+          <Border CornerRadius="8" Background="#FFFFFF" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" Margin="0,8,0,0">
+            <DockPanel LastChildFill="True">
+              <Border DockPanel.Dock="Top" Background="#F0F0F0" Padding="8,4" CornerRadius="8,8,0,0">
+                <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="{DynamicResource LabelBrush}"/>
+              </Border>
+              <ContentPresenter Margin="{TemplateBinding Padding}"/>
+            </DockPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="CheckBox">
+    <Setter Property="Foreground" Value="#000000"/>
+    <Setter Property="Margin" Value="0,4,0,0"/>
+  </Style>
+</ResourceDictionary>
+"@
+$lightReader = New-Object System.Xml.XmlNodeReader ([xml]$lightThemeXaml)
+$script:LightResources = [Windows.Markup.XamlReader]::Load($lightReader)
+
+function Apply-Theme {
+  param([string]$Theme)
+  if ($Theme -eq 'Light') {
+    $window.Resources = $script:LightResources
+    $window.Background = [Windows.Media.Brushes]::White
+    $window.Foreground = [Windows.Media.Brushes]::Black
+  } else {
+    $window.Resources = $script:DarkResources
+    $window.Background = [Windows.Media.Brushes]::Black
+    $window.Foreground = [Windows.Media.Brushes]::White
+  }
+}
 
 # Controls
 $tbUser         = $window.FindName("tbUser")
@@ -626,6 +757,7 @@ function Load-Prefs {
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
+Apply-Theme $cmbTheme.Text
 $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
 $pbPass.Add_PasswordChanged({
     $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
@@ -647,7 +779,7 @@ $cbAutoUpdate.Add_Checked({ Save-Prefs })
 $cbAutoUpdate.Add_Unchecked({ Save-Prefs })
 $cbConfirmCopy.Add_Checked({ Save-Prefs })
 $cbConfirmCopy.Add_Unchecked({ Save-Prefs })
-$cmbTheme.Add_SelectionChanged({ Save-Prefs })
+$cmbTheme.Add_SelectionChanged({ Apply-Theme $cmbTheme.Text; Save-Prefs })
 $cmbLanguage.Add_SelectionChanged({ Save-Prefs })
 $tbComp.Add_TextChanged({
     Update-ComputerSuggestions $tbComp.Text
