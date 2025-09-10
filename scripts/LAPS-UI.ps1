@@ -365,28 +365,27 @@ Start-Process -FilePath $Exe
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Padding" Value="12,6"/>
       <Setter Property="Margin" Value="0,0,4,0"/>
-      <Setter Property="Background" Value="#2D2D2D"/>
       <Setter Property="Foreground" Value="#EEEEEE"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TabItem">
-            <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+            <Border x:Name="TabBorder" Background="#2D2D2D" CornerRadius="4" Padding="{TemplateBinding Padding}">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="TabBorder" Property="Background" Value="#0A84FF"/>
+                <Setter Property="Foreground" Value="White"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="TabBorder" Property="Background" Value="#3E3E42"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
       </Setter>
-      <Style.Triggers>
-        <Trigger Property="IsSelected" Value="True">
-          <Setter Property="Background" Value="#0A84FF"/>
-          <Setter Property="Foreground" Value="White"/>
-        </Trigger>
-        <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="#3E3E42"/>
-        </Trigger>
-      </Style.Triggers>
     </Style>
   </Window.Resources>
 
@@ -668,28 +667,27 @@ $lightThemeXaml = @"
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="Padding" Value="12,6"/>
     <Setter Property="Margin" Value="0,0,4,0"/>
-    <Setter Property="Background" Value="#E5E5E5"/>
     <Setter Property="Foreground" Value="#1E1E1E"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="TabItem">
-          <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+          <Border x:Name="TabBorder" Background="#E5E5E5" CornerRadius="4" Padding="{TemplateBinding Padding}">
             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
           </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="TabBorder" Property="Background" Value="#0A84FF"/>
+              <Setter Property="Foreground" Value="White"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="TabBorder" Property="Background" Value="#DDDDDD"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
-    <Style.Triggers>
-      <Trigger Property="IsSelected" Value="True">
-        <Setter Property="Background" Value="#0A84FF"/>
-        <Setter Property="Foreground" Value="White"/>
-      </Trigger>
-      <Trigger Property="IsMouseOver" Value="True">
-        <Setter Property="Background" Value="#DDDDDD"/>
-      </Trigger>
-    </Style.Triggers>
   </Style>
 </ResourceDictionary>
 "@
