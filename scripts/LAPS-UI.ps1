@@ -6,7 +6,7 @@
 
 # --- Config ---
 $UseLdaps = $false
-$ClipboardAutoClearSeconds = 20
+$script:ClipboardAutoClearSeconds = 20
 $CurrentVersion = '1.0.5'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
@@ -240,6 +240,7 @@ Start-Process -FilePath $Exe
         WindowStartupLocation="CenterScreen"
         Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
   <Window.Resources>
+    <SolidColorBrush x:Key="LabelBrush" Color="#BEBEBE"/>
     <Style x:Key="AccentButton" TargetType="Button">
       <Setter Property="Background" Value="#0A84FF"/>
       <Setter Property="Foreground" Value="White"/>
@@ -335,7 +336,7 @@ Start-Process -FilePath $Exe
                     BorderThickness="{TemplateBinding BorderThickness}" Margin="0,8,0,0">
               <DockPanel LastChildFill="True">
                 <Border DockPanel.Dock="Top" Background="#2B2B2B" Padding="8,4" CornerRadius="8,8,0,0">
-                  <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="#BEBEBE"/>
+                  <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="{DynamicResource LabelBrush}"/>
                 </Border>
                 <ContentPresenter Margin="{TemplateBinding Padding}"/>
               </DockPanel>
@@ -351,14 +352,16 @@ Start-Process -FilePath $Exe
     </Style>
   </Window.Resources>
 
-  <Grid Margin="16">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-      </Grid.RowDefinitions>
+  <TabControl Margin="16" Background="#1E1E1E" BorderThickness="0">
+    <TabItem Header="Main">
+      <Grid Background="#1E1E1E">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
       <!-- Credentials & AD target side by side -->
       <Grid Grid.Row="0" Margin="0,0,0,14">
@@ -373,28 +376,25 @@ Start-Process -FilePath $Exe
               <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbUser"/>
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
             <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="0,8,0,0"/>
-            <CheckBox Grid.Row="2" Grid.Column="1" x:Name="cbRememberUser" Content="Remember user" Margin="0,8,0,0"/>
           </Grid>
         </GroupBox>
 
         <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,0">
           <Grid>
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
-            <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="12,0,0,0" VerticalAlignment="Center"/>
-            <CheckBox  Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="cbRememberServer" Content="Remember controller/domain" Margin="0,8,0,0"/>
           </Grid>
         </GroupBox>
       </Grid>
@@ -408,7 +408,7 @@ Start-Process -FilePath $Exe
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
-          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource IconButton}" Margin="12,0,0,0" ToolTip="History"/>
           <Button   Grid.Row="0" Grid.Column="3" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
@@ -443,7 +443,7 @@ Start-Process -FilePath $Exe
             <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
 
           <!-- NEW: RichTextBox for colorized clear text -->
@@ -455,12 +455,7 @@ Start-Process -FilePath $Exe
           <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show" Margin="12,6,12,0" VerticalAlignment="Center"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copy" Style="{StaticResource AccentButton}" IsEnabled="False"/>
 
-          <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,8,0,0">
-            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
-            <TextBox x:Name="tbClipboardSecs" Width="50"/>
-          </StackPanel>
-
-          <TextBlock Grid.Row="2" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
+          <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
         </Grid>
       </GroupBox>
 
@@ -469,12 +464,184 @@ Start-Process -FilePath $Exe
         <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
     </Grid>
+  </TabItem>
+  <TabItem Header="Settings">
+    <StackPanel Margin="10" Background="#1E1E1E">
+      <GroupBox Header="Security">
+        <StackPanel>
+          <CheckBox x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="0,0,0,8"/>
+          <CheckBox x:Name="cbClipboardAutoClear" Content="Enable clipboard auto-clear" IsChecked="True" Margin="0,0,0,8"/>
+          <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
+            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
+            <TextBox x:Name="tbClipboardSecs" Width="50"/>
+          </StackPanel>
+        </StackPanel>
+      </GroupBox>
+      <GroupBox Header="Preferences">
+        <StackPanel>
+          <CheckBox x:Name="cbRememberUser" Content="Remember user"/>
+          <CheckBox x:Name="cbRememberServer" Content="Remember controller/domain"/>
+          <CheckBox x:Name="cbAutoUpdate" Content="Check for updates on launch" IsChecked="True"/>
+          <CheckBox x:Name="cbConfirmCopy" Content="Confirm before copying"/>
+        </StackPanel>
+      </GroupBox>
+      <GroupBox Header="Appearance">
+        <StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Theme" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
+            <ComboBox x:Name="cmbTheme" Width="120" SelectedIndex="0">
+              <ComboBoxItem Content="Dark"/>
+              <ComboBoxItem Content="Light"/>
+            </ComboBox>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Language" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
+            <ComboBox x:Name="cmbLanguage" Width="120">
+              <ComboBoxItem Content="English"/>
+              <ComboBoxItem Content="French"/>
+            </ComboBox>
+          </StackPanel>
+        </StackPanel>
+      </GroupBox>
+    </StackPanel>
+  </TabItem>
+  </TabControl>
 </Window>
 "@ 
 
 # ---------- Build UI ----------
 $reader = (New-Object System.Xml.XmlNodeReader $xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
+
+$script:DarkResources = $window.Resources
+$lightThemeXaml = @"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="LabelBrush" Color="#333333"/>
+  <Style x:Key="AccentButton" TargetType="Button">
+    <Setter Property="Background" Value="#0A84FF"/>
+    <Setter Property="Foreground" Value="White"/>
+    <Setter Property="FontSize"   Value="14"/>
+    <Setter Property="MinHeight"  Value="36"/>
+    <Setter Property="MinWidth"   Value="110"/>
+    <Setter Property="Padding"    Value="16,10"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="HorizontalAlignment" Value="Right"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border Background="{TemplateBinding Background}"
+                  CornerRadius="6" Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#0C60C0"/></Trigger>
+      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource AccentButton}">
+    <Setter Property="Width"    Value="32"/>
+    <Setter Property="Height"   Value="32"/>
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="MinHeight" Value="0"/>
+    <Setter Property="Padding"  Value="0"/>
+  </Style>
+
+  <Style TargetType="TextBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+            <ScrollViewer x:Name="PART_ContentHost"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="RichTextBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="FontFamily" Value="Cascadia Code,Consolas"/>
+    <Setter Property="FontSize" Value="20"/>
+    <Setter Property="IsReadOnly" Value="True"/>
+  </Style>
+
+  <Style TargetType="PasswordBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="PasswordBox">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+            <ScrollViewer x:Name="PART_ContentHost"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="GroupBox">
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="12"/>
+    <Setter Property="Margin" Value="0,0,0,14"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type GroupBox}">
+          <Border CornerRadius="8" Background="#FFFFFF" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" Margin="0,8,0,0">
+            <DockPanel LastChildFill="True">
+              <Border DockPanel.Dock="Top" Background="#F0F0F0" Padding="8,4" CornerRadius="8,8,0,0">
+                <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="{DynamicResource LabelBrush}"/>
+              </Border>
+              <ContentPresenter Margin="{TemplateBinding Padding}"/>
+            </DockPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="CheckBox">
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="Margin" Value="0,4,0,0"/>
+  </Style>
+</ResourceDictionary>
+"@
+$lightReader = New-Object System.Xml.XmlNodeReader ([xml]$lightThemeXaml)
+$script:LightResources = [Windows.Markup.XamlReader]::Load($lightReader)
+
+function Apply-Theme {
+  param([string]$Theme)
+  if ($Theme -eq 'Light') {
+    $window.Resources = $script:LightResources
+    $window.Background = [Windows.Media.Brushes]::White
+    $window.Foreground = [Windows.Media.Brushes]::Black
+  } else {
+    $window.Resources = $script:DarkResources
+    $window.Background = [Windows.Media.Brushes]::Black
+    $window.Foreground = [Windows.Media.Brushes]::White
+  }
+}
 
 # Controls
 $tbUser         = $window.FindName("tbUser")
@@ -497,15 +664,20 @@ $cbShow         = $window.FindName("cbShow")
 $btnCopy        = $window.FindName("btnCopy")
 $lblCountdown   = $window.FindName("lblCountdown")
 $tbClipboardSecs = $window.FindName("tbClipboardSecs")
+$cbClipboardAutoClear = $window.FindName("cbClipboardAutoClear")
 $cbRememberUser = $window.FindName("cbRememberUser")
 $cbRememberServer = $window.FindName("cbRememberServer")
+$cbAutoUpdate   = $window.FindName("cbAutoUpdate")
+$cbConfirmCopy  = $window.FindName("cbConfirmCopy")
+$cmbTheme       = $window.FindName("cmbTheme")
+$cmbLanguage    = $window.FindName("cmbLanguage")
 $btnUpdate     = $window.FindName("btnUpdate")
 $btnIgnore     = $window.FindName("btnIgnore")
 
 # Init
 $cbLdaps.IsChecked = $UseLdaps
 $script:UseLdaps   = [bool]$cbLdaps.IsChecked
-$tbClipboardSecs.Text = $ClipboardAutoClearSeconds
+$tbClipboardSecs.Text = $script:ClipboardAutoClearSeconds
 $script:CurrentLapsPassword = ""
 $script:DoneTimer = $null
 
@@ -537,14 +709,19 @@ function Save-Prefs {
   $history = $script:Prefs.History
   $ignore  = $script:Prefs.IgnoreVersion
   $script:Prefs = @{
-    RememberUser     = [bool]$cbRememberUser.IsChecked
-    UserName         = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
-    RememberServer   = [bool]$cbRememberServer.IsChecked
-    ServerName       = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
-    UseLdaps         = [bool]$cbLdaps.IsChecked
-    ClipboardSeconds = $script:ClipboardAutoClearSeconds
-    History          = $history
-    IgnoreVersion    = $ignore
+    RememberUser        = [bool]$cbRememberUser.IsChecked
+    UserName            = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
+    RememberServer      = [bool]$cbRememberServer.IsChecked
+    ServerName          = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
+    UseLdaps            = [bool]$cbLdaps.IsChecked
+    AutoClearClipboard  = [bool]$cbClipboardAutoClear.IsChecked
+    ClipboardSeconds    = $script:ClipboardAutoClearSeconds
+    AutoUpdate          = [bool]$cbAutoUpdate.IsChecked
+    ConfirmCopy         = [bool]$cbConfirmCopy.IsChecked
+    Theme               = $cmbTheme.Text
+    Language            = $cmbLanguage.Text
+    History             = $history
+    IgnoreVersion       = $ignore
   }
   $persist = $script:Prefs.Clone()
   $persist.History = @($history | ForEach-Object { Protect-String $_ })
@@ -557,8 +734,13 @@ function Load-Prefs {
       $loaded = Get-Content $PrefFile -Raw | ConvertFrom-Json
       if ($loaded.RememberUser) { $cbRememberUser.IsChecked = $true; if ($loaded.UserName) { $tbUser.Text = Unprotect-String $loaded.UserName } }
       if ($loaded.RememberServer) { $cbRememberServer.IsChecked = $true; if ($loaded.ServerName) { $tbServer.Text = Unprotect-String $loaded.ServerName } }
-      if ($loaded.UseLdaps) { $cbLdaps.IsChecked = [bool]$loaded.UseLdaps }
+      if ($null -ne $loaded.UseLdaps) { $cbLdaps.IsChecked = [bool]$loaded.UseLdaps }
+      if ($null -ne $loaded.AutoClearClipboard) { $cbClipboardAutoClear.IsChecked = [bool]$loaded.AutoClearClipboard }
       if ($loaded.ClipboardSeconds) { $script:ClipboardAutoClearSeconds = [int]$loaded.ClipboardSeconds }
+      if ($null -ne $loaded.AutoUpdate) { $cbAutoUpdate.IsChecked = [bool]$loaded.AutoUpdate }
+      if ($null -ne $loaded.ConfirmCopy) { $cbConfirmCopy.IsChecked = [bool]$loaded.ConfirmCopy }
+      if ($loaded.Theme) { $cmbTheme.Text = $loaded.Theme }
+      if ($loaded.Language) { $cmbLanguage.Text = $loaded.Language }
       $hist = @()
       if ($loaded.History -is [System.Collections.IEnumerable]) {
         foreach ($enc in $loaded.History) {
@@ -575,6 +757,7 @@ function Load-Prefs {
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
+Apply-Theme $cmbTheme.Text
 $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
 $pbPass.Add_PasswordChanged({
     $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
@@ -590,6 +773,14 @@ $window.Add_Closed({ Save-Prefs })
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true;  Save-Prefs })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false; Save-Prefs })
 $tbClipboardSecs.Add_LostFocus({ Save-Prefs })
+$cbClipboardAutoClear.Add_Checked({ Save-Prefs })
+$cbClipboardAutoClear.Add_Unchecked({ Save-Prefs })
+$cbAutoUpdate.Add_Checked({ Save-Prefs })
+$cbAutoUpdate.Add_Unchecked({ Save-Prefs })
+$cbConfirmCopy.Add_Checked({ Save-Prefs })
+$cbConfirmCopy.Add_Unchecked({ Save-Prefs })
+$cmbTheme.Add_SelectionChanged({ Apply-Theme $cmbTheme.Text; Save-Prefs })
+$cmbLanguage.Add_SelectionChanged({ Save-Prefs })
 $tbComp.Add_TextChanged({
     Update-ComputerSuggestions $tbComp.Text
     if ($gbDetails.Visibility -ne 'Collapsed') {
@@ -714,6 +905,10 @@ $timer.Add_Tick({
 
 $btnCopy.Add_Click({
   if ([string]::IsNullOrWhiteSpace($script:CurrentLapsPassword)) { return }
+  if ($cbConfirmCopy.IsChecked) {
+    $res = [System.Windows.MessageBox]::Show("Copy password to clipboard?","Confirm",'YesNo','Question')
+    if ($res -ne 'Yes') { return }
+  }
   $usedWinRT = $false
   try {
     $winRtSupported = [Windows.Foundation.Metadata.ApiInformation]::IsMethodPresent(
@@ -734,15 +929,22 @@ $btnCopy.Add_Click({
   [System.Windows.MessageBox]::Show(("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
     "Copied",'OK','Information') | Out-Null
 
-  $script:CountdownRemaining = $ClipboardAutoClearSeconds
-  $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
-  $lblCountdown.Foreground = '#FFA07A'
-  $lblCountdown.Visibility = 'Visible'
-  $timer.Stop(); $timer.Start()
+  if ($cbClipboardAutoClear.IsChecked) {
+    $script:CountdownRemaining = $script:ClipboardAutoClearSeconds
+    $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
+    $lblCountdown.Foreground = '#FFA07A'
+    $lblCountdown.Visibility = 'Visible'
+    $timer.Stop(); $timer.Start()
+  } else {
+    $lblCountdown.Visibility = 'Collapsed'
+  }
 })
 
 # ---------- Retrieve ----------
-$updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
+$updateInfo = $null
+if ($cbAutoUpdate.IsChecked) {
+  $updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
+}
 if ($updateInfo) {
   $btnUpdate.Content = "Update to v$($updateInfo.Version)"
   $btnUpdate.Visibility = 'Visible'
