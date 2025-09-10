@@ -6,7 +6,7 @@
 
 # --- Config ---
 $UseLdaps = $false
-$ClipboardAutoClearSeconds = 20
+$script:ClipboardAutoClearSeconds = 20
 $CurrentVersion = '1.0.5'
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
@@ -351,14 +351,16 @@ Start-Process -FilePath $Exe
     </Style>
   </Window.Resources>
 
-  <Grid Margin="16">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-      </Grid.RowDefinitions>
+  <TabControl Margin="16">
+    <TabItem Header="Main">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
       <!-- Credentials & AD target side by side -->
       <Grid Grid.Row="0" Margin="0,0,0,14">
@@ -373,28 +375,25 @@ Start-Process -FilePath $Exe
               <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbUser"/>
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
             <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="0,8,0,0"/>
-            <CheckBox Grid.Row="2" Grid.Column="1" x:Name="cbRememberUser" Content="Remember user" Margin="0,8,0,0"/>
           </Grid>
         </GroupBox>
 
         <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,0">
           <Grid>
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
-            <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="12,0,0,0" VerticalAlignment="Center"/>
-            <CheckBox  Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="cbRememberServer" Content="Remember controller/domain" Margin="0,8,0,0"/>
           </Grid>
         </GroupBox>
       </Grid>
@@ -443,7 +442,7 @@ Start-Process -FilePath $Exe
             <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
 
           <!-- NEW: RichTextBox for colorized clear text -->
@@ -455,12 +454,7 @@ Start-Process -FilePath $Exe
           <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show" Margin="12,6,12,0" VerticalAlignment="Center"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copy" Style="{StaticResource AccentButton}" IsEnabled="False"/>
 
-          <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,8,0,0">
-            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
-            <TextBox x:Name="tbClipboardSecs" Width="50"/>
-          </StackPanel>
-
-          <TextBlock Grid.Row="2" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
+          <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
         </Grid>
       </GroupBox>
 
@@ -469,6 +463,48 @@ Start-Process -FilePath $Exe
         <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
     </Grid>
+  </TabItem>
+  <TabItem Header="Settings">
+    <StackPanel Margin="10">
+      <GroupBox Header="Security">
+        <StackPanel>
+          <CheckBox x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="0,0,0,8"/>
+          <CheckBox x:Name="cbClipboardAutoClear" Content="Enable clipboard auto-clear" IsChecked="True" Margin="0,0,0,8"/>
+          <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
+            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBox x:Name="tbClipboardSecs" Width="50"/>
+          </StackPanel>
+        </StackPanel>
+      </GroupBox>
+      <GroupBox Header="Preferences">
+        <StackPanel>
+          <CheckBox x:Name="cbRememberUser" Content="Remember user"/>
+          <CheckBox x:Name="cbRememberServer" Content="Remember controller/domain"/>
+          <CheckBox x:Name="cbAutoUpdate" Content="Check for updates on launch" IsChecked="True"/>
+          <CheckBox x:Name="cbConfirmCopy" Content="Confirm before copying"/>
+        </StackPanel>
+      </GroupBox>
+      <GroupBox Header="Appearance">
+        <StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Theme" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <ComboBox x:Name="cmbTheme" Width="120">
+              <ComboBoxItem Content="Dark"/>
+              <ComboBoxItem Content="Light"/>
+            </ComboBox>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Language" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <ComboBox x:Name="cmbLanguage" Width="120">
+              <ComboBoxItem Content="English"/>
+              <ComboBoxItem Content="French"/>
+            </ComboBox>
+          </StackPanel>
+        </StackPanel>
+      </GroupBox>
+    </StackPanel>
+  </TabItem>
+  </TabControl>
 </Window>
 "@ 
 
@@ -497,15 +533,20 @@ $cbShow         = $window.FindName("cbShow")
 $btnCopy        = $window.FindName("btnCopy")
 $lblCountdown   = $window.FindName("lblCountdown")
 $tbClipboardSecs = $window.FindName("tbClipboardSecs")
+$cbClipboardAutoClear = $window.FindName("cbClipboardAutoClear")
 $cbRememberUser = $window.FindName("cbRememberUser")
 $cbRememberServer = $window.FindName("cbRememberServer")
+$cbAutoUpdate   = $window.FindName("cbAutoUpdate")
+$cbConfirmCopy  = $window.FindName("cbConfirmCopy")
+$cmbTheme       = $window.FindName("cmbTheme")
+$cmbLanguage    = $window.FindName("cmbLanguage")
 $btnUpdate     = $window.FindName("btnUpdate")
 $btnIgnore     = $window.FindName("btnIgnore")
 
 # Init
 $cbLdaps.IsChecked = $UseLdaps
 $script:UseLdaps   = [bool]$cbLdaps.IsChecked
-$tbClipboardSecs.Text = $ClipboardAutoClearSeconds
+$tbClipboardSecs.Text = $script:ClipboardAutoClearSeconds
 $script:CurrentLapsPassword = ""
 $script:DoneTimer = $null
 
@@ -537,14 +578,19 @@ function Save-Prefs {
   $history = $script:Prefs.History
   $ignore  = $script:Prefs.IgnoreVersion
   $script:Prefs = @{
-    RememberUser     = [bool]$cbRememberUser.IsChecked
-    UserName         = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
-    RememberServer   = [bool]$cbRememberServer.IsChecked
-    ServerName       = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
-    UseLdaps         = [bool]$cbLdaps.IsChecked
-    ClipboardSeconds = $script:ClipboardAutoClearSeconds
-    History          = $history
-    IgnoreVersion    = $ignore
+    RememberUser        = [bool]$cbRememberUser.IsChecked
+    UserName            = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
+    RememberServer      = [bool]$cbRememberServer.IsChecked
+    ServerName          = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
+    UseLdaps            = [bool]$cbLdaps.IsChecked
+    AutoClearClipboard  = [bool]$cbClipboardAutoClear.IsChecked
+    ClipboardSeconds    = $script:ClipboardAutoClearSeconds
+    AutoUpdate          = [bool]$cbAutoUpdate.IsChecked
+    ConfirmCopy         = [bool]$cbConfirmCopy.IsChecked
+    Theme               = $cmbTheme.Text
+    Language            = $cmbLanguage.Text
+    History             = $history
+    IgnoreVersion       = $ignore
   }
   $persist = $script:Prefs.Clone()
   $persist.History = @($history | ForEach-Object { Protect-String $_ })
@@ -557,8 +603,13 @@ function Load-Prefs {
       $loaded = Get-Content $PrefFile -Raw | ConvertFrom-Json
       if ($loaded.RememberUser) { $cbRememberUser.IsChecked = $true; if ($loaded.UserName) { $tbUser.Text = Unprotect-String $loaded.UserName } }
       if ($loaded.RememberServer) { $cbRememberServer.IsChecked = $true; if ($loaded.ServerName) { $tbServer.Text = Unprotect-String $loaded.ServerName } }
-      if ($loaded.UseLdaps) { $cbLdaps.IsChecked = [bool]$loaded.UseLdaps }
+      if ($null -ne $loaded.UseLdaps) { $cbLdaps.IsChecked = [bool]$loaded.UseLdaps }
+      if ($null -ne $loaded.AutoClearClipboard) { $cbClipboardAutoClear.IsChecked = [bool]$loaded.AutoClearClipboard }
       if ($loaded.ClipboardSeconds) { $script:ClipboardAutoClearSeconds = [int]$loaded.ClipboardSeconds }
+      if ($null -ne $loaded.AutoUpdate) { $cbAutoUpdate.IsChecked = [bool]$loaded.AutoUpdate }
+      if ($null -ne $loaded.ConfirmCopy) { $cbConfirmCopy.IsChecked = [bool]$loaded.ConfirmCopy }
+      if ($loaded.Theme) { $cmbTheme.Text = $loaded.Theme }
+      if ($loaded.Language) { $cmbLanguage.Text = $loaded.Language }
       $hist = @()
       if ($loaded.History -is [System.Collections.IEnumerable]) {
         foreach ($enc in $loaded.History) {
@@ -590,6 +641,14 @@ $window.Add_Closed({ Save-Prefs })
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true;  Save-Prefs })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false; Save-Prefs })
 $tbClipboardSecs.Add_LostFocus({ Save-Prefs })
+$cbClipboardAutoClear.Add_Checked({ Save-Prefs })
+$cbClipboardAutoClear.Add_Unchecked({ Save-Prefs })
+$cbAutoUpdate.Add_Checked({ Save-Prefs })
+$cbAutoUpdate.Add_Unchecked({ Save-Prefs })
+$cbConfirmCopy.Add_Checked({ Save-Prefs })
+$cbConfirmCopy.Add_Unchecked({ Save-Prefs })
+$cmbTheme.Add_SelectionChanged({ Save-Prefs })
+$cmbLanguage.Add_SelectionChanged({ Save-Prefs })
 $tbComp.Add_TextChanged({
     Update-ComputerSuggestions $tbComp.Text
     if ($gbDetails.Visibility -ne 'Collapsed') {
@@ -714,6 +773,10 @@ $timer.Add_Tick({
 
 $btnCopy.Add_Click({
   if ([string]::IsNullOrWhiteSpace($script:CurrentLapsPassword)) { return }
+  if ($cbConfirmCopy.IsChecked) {
+    $res = [System.Windows.MessageBox]::Show("Copy password to clipboard?","Confirm",'YesNo','Question')
+    if ($res -ne 'Yes') { return }
+  }
   $usedWinRT = $false
   try {
     $winRtSupported = [Windows.Foundation.Metadata.ApiInformation]::IsMethodPresent(
@@ -734,15 +797,22 @@ $btnCopy.Add_Click({
   [System.Windows.MessageBox]::Show(("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
     "Copied",'OK','Information') | Out-Null
 
-  $script:CountdownRemaining = $ClipboardAutoClearSeconds
-  $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
-  $lblCountdown.Foreground = '#FFA07A'
-  $lblCountdown.Visibility = 'Visible'
-  $timer.Stop(); $timer.Start()
+  if ($cbClipboardAutoClear.IsChecked) {
+    $script:CountdownRemaining = $script:ClipboardAutoClearSeconds
+    $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
+    $lblCountdown.Foreground = '#FFA07A'
+    $lblCountdown.Visibility = 'Visible'
+    $timer.Stop(); $timer.Start()
+  } else {
+    $lblCountdown.Visibility = 'Collapsed'
+  }
 })
 
 # ---------- Retrieve ----------
-$updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
+$updateInfo = $null
+if ($cbAutoUpdate.IsChecked) {
+  $updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
+}
 if ($updateInfo) {
   $btnUpdate.Content = "Update to v$($updateInfo.Version)"
   $btnUpdate.Visibility = 'Visible'
