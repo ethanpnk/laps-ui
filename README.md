@@ -118,13 +118,3 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 
 ---
 
-## 📝 Release Notes
-
-```markdown
-## Summary
-- disable computer name field until a user password is entered
-
-## Testing
-- `pwsh -NoLogo -NoProfile -File scripts/LAPS-UI.ps1`
-```
-
