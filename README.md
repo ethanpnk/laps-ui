@@ -116,10 +116,3 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 
 - **Windows PowerShell 5.1**
 - Not designed for **PowerShell 7** (WPF/WinRT differs)
-
-## What's New in v1.0.6
-
-- Added option to export password history as CSV.
-- Fixed clipboard purge timer not resetting after copy.
-
----
