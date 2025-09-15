@@ -1,4 +1,8 @@
-﻿# LAPS-UI.ps1 - WPF Dark, PS 5.1 (STA)
+param(
+  [int]$LockoutResetSeconds = 60
+)
+
+# LAPS-UI.ps1 - WPF Dark, PS 5.1 (STA)
 # LDAP by default, optional LDAPS, modern dark UI, 20s countdown
 # Read-only "LAPS password" field + reliable green "cleared" message
 # Remember user & controller/domain (local JSON), update checker
@@ -7,10 +11,15 @@
 # --- Config ---
 $UseLdaps = $false
 $script:ClipboardAutoClearSeconds = 20
+$script:LockoutResetSeconds = $LockoutResetSeconds
 $CurrentVersion = '1.0.5'
+$script:LockoutTimer = $null
+$script:MaxAuthAttempts = 3
+$script:FailedAuthCount = 0
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
+Add-Type -AssemblyName System.DirectoryServices.AccountManagement
 Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null
 
 Add-Type @"
@@ -95,6 +104,25 @@ function Get-DirectorySearcher {
       'msLAPS-Password','msLAPS-PasswordExpirationTime',
       'ms-Mcs-AdmPwd','ms-Mcs-AdmPwdExpirationTime'))
   $ds }
+
+function Test-AdCredential {
+  param(
+    [string]$User,
+    [string]$Password,
+    [string]$ServerOrDomain)
+  if ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Password)) { return $true }
+  try {
+    $ctxType = [System.DirectoryServices.AccountManagement.ContextType]::Domain
+    $ctx = if ([string]::IsNullOrWhiteSpace($ServerOrDomain)) {
+      New-Object System.DirectoryServices.AccountManagement.PrincipalContext($ctxType)
+    } else {
+      New-Object System.DirectoryServices.AccountManagement.PrincipalContext($ctxType,$ServerOrDomain)
+    }
+    $ctx.ValidateCredentials($User,$Password)
+  } catch {
+    $false
+  }
+}
 
 function Normalize-ComputerName { param([string]$InputName)
   if ([string]::IsNullOrWhiteSpace($InputName)) { return "" }
@@ -511,7 +539,7 @@ function Show-UpdatePrompt {
       <GroupBox Grid.Row="1" Header="Search" x:Name="gbSearch">
         <Grid>
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -520,6 +548,7 @@ function Show-UpdatePrompt {
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource IconButton}" Margin="12,0,0,0" ToolTip="History"/>
           <Button   Grid.Row="0" Grid.Column="3" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
+          <Button   Grid.Row="0" Grid.Column="4" x:Name="btnRetry" Content="Retry" Style="{StaticResource AccentButton}" Margin="12,0,0,0" Visibility="Collapsed"/>
           <Popup    x:Name="popCompSuggest" PlacementTarget="{Binding ElementName=tbComp}" Placement="Bottom" StaysOpen="False">
             <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
               <ListBox x:Name="lbCompSuggest" MaxHeight="200" Width="{Binding ElementName=tbComp, Path=ActualWidth}" Background="#2D2D2D" Foreground="#EEEEEE"/>
@@ -864,6 +893,7 @@ $translations = @{
     lblController   = 'Controller/Domain'
     lblCompName     = 'Computer name'
     btnGet          = 'Retrieve'
+    btnRetry        = 'Retry'
     btnUpdate       = 'Update'
     btnUpdateTo     = 'Update to v{0}'
     btnIgnore       = 'Ignore'
@@ -909,6 +939,7 @@ $translations = @{
     lblController   = 'Contrôleur/Domaine'
     lblCompName     = "Nom de l'ordinateur"
     btnGet          = 'Récupérer'
+    btnRetry        = 'Réessayer'
     btnUpdate       = 'Mettre à jour'
     btnUpdateTo     = 'Mettre à jour vers v{0}'
     btnIgnore       = 'Ignorer'
@@ -954,6 +985,7 @@ $translations = @{
     lblController   = 'Controlador/Dominio'
     lblCompName     = 'Nombre del equipo'
     btnGet          = 'Obtener'
+    btnRetry        = 'Reintentar'
     btnUpdate       = 'Actualizar'
     btnUpdateTo     = 'Actualizar a v{0}'
     btnIgnore       = 'Ignorar'
@@ -999,6 +1031,7 @@ $translations = @{
     lblController   = 'Controller/Dominio'
     lblCompName     = 'Nome del computer'
     btnGet          = 'Recupera'
+    btnRetry        = 'Riprova'
     btnUpdate       = 'Aggiorna'
     btnUpdateTo     = 'Aggiorna a v{0}'
     btnIgnore       = 'Ignora'
@@ -1044,6 +1077,7 @@ $translations = @{
     lblController   = 'Controller/Domäne'
     lblCompName     = 'Computername'
     btnGet          = 'Abrufen'
+    btnRetry        = 'Erneut versuchen'
     btnUpdate       = 'Aktualisieren'
     btnUpdateTo     = 'Aktualisieren auf v{0}'
     btnIgnore       = 'Ignorieren'
@@ -1089,6 +1123,7 @@ $translations = @{
     lblController   = 'Controlador/Domínio'
     lblCompName     = 'Nome do computador'
     btnGet          = 'Obter'
+    btnRetry        = 'Tentar novamente'
     btnUpdate       = 'Atualizar'
     btnUpdateTo     = 'Atualizar para v{0}'
     btnIgnore       = 'Ignorar'
@@ -1134,6 +1169,7 @@ $translations = @{
     lblController   = '控制器/域'
     lblCompName     = '计算机名'
     btnGet          = '获取'
+    btnRetry        = '重试'
     btnUpdate       = '更新'
     btnUpdateTo     = '更新到 v{0}'
     btnIgnore       = '忽略'
@@ -1179,6 +1215,7 @@ $translations = @{
     lblController   = 'المراقب/المجال'
     lblCompName     = 'اسم الكمبيوتر'
     btnGet          = 'استرجاع'
+    btnRetry        = 'إعادة المحاولة'
     btnUpdate       = 'تحديث'
     btnUpdateTo     = 'التحديث إلى v{0}'
     btnIgnore       = 'تجاهل'
@@ -1229,6 +1266,7 @@ function Apply-Language {
   $lblController.Text   = $t.lblController
   $lblCompName.Text     = $t.lblCompName
   $btnGet.Content       = $t.btnGet
+  $btnRetry.Content     = $t.btnRetry
   $btnUpdate.Content    = $t.btnUpdate
   $btnIgnore.Content    = $t.btnIgnore
   $cbShow.Content       = $t.cbShow
@@ -1295,6 +1333,7 @@ $popCompSuggest = $window.FindName("popCompSuggest")
 $lbCompSuggest  = $window.FindName("lbCompSuggest")
 $btnHistory     = $window.FindName("btnHistory")
 $btnGet         = $window.FindName("btnGet")
+$btnRetry       = $window.FindName("btnRetry")
 $gbDetails      = $window.FindName("gbDetails")
 $txtDetails     = $window.FindName("txtDetails")
 $spExpire       = $window.FindName("spExpire")
@@ -1528,6 +1567,21 @@ function Update-ExpirationIndicator([nullable[DateTime]]$exp) {
   }
 }
 
+function Reset-FailedAuthCount {
+  $script:FailedAuthCount = 0
+  if ($script:LockoutTimer) {
+    $script:LockoutTimer.Stop()
+    $script:LockoutTimer.Dispose()
+    $script:LockoutTimer = $null
+  }
+  if ($btnRetry) {
+    $window.Dispatcher.Invoke({
+      $btnRetry.Visibility = 'Collapsed'
+      $btnGet.IsEnabled = $true
+    })
+  }
+}
+
 # Show/Hide clear text
 $cbShow.Add_Checked({
   Update-PasswordDisplay $script:CurrentLapsPassword
@@ -1611,6 +1665,7 @@ if ($updateInfo) {
 }
 
 $btnGet.Add_Click({
+  $lockout = $false
   try {
     $popCompSuggest.IsOpen = $false
     $gbDetails.Visibility = 'Collapsed'
@@ -1627,6 +1682,18 @@ $btnGet.Add_Click({
     $cred = $null
     if (-not [string]::IsNullOrWhiteSpace($tbUser.Text)) {
       if ([string]::IsNullOrWhiteSpace($pbPass.Password)) { throw "You entered a username without a password." }
+      if ($script:FailedAuthCount -ge $script:MaxAuthAttempts) { throw "Too many invalid credential attempts." }
+      if (-not (Test-AdCredential -User $tbUser.Text -Password $pbPass.Password -ServerOrDomain $tbServer.Text)) {
+        $script:FailedAuthCount++
+        $remaining = $script:MaxAuthAttempts - $script:FailedAuthCount
+        if ($remaining -le 0) {
+          throw "Too many invalid credential attempts."
+        } else {
+          throw ("Invalid credentials. {0} attempt(s) remaining." -f $remaining)
+        }
+      } else {
+        $script:FailedAuthCount = 0
+      }
       $secure = ConvertTo-SecureString -String $pbPass.Password -AsPlainText -Force
       $cred = New-Object System.Management.Automation.PSCredential ($tbUser.Text, $secure)
       if ($cbRememberUser.IsChecked -or $cbRememberServer.IsChecked) { Save-Prefs }
@@ -1672,15 +1739,27 @@ $btnGet.Add_Click({
       Update-ExpirationIndicator $null
     }
   } catch {
-    $txtDetails.Text = "Error: $($_.Exception.Message)"
+    $msg = $_.Exception.Message
+    $txtDetails.Text = "Error: $msg"
     $gbDetails.Visibility = 'Visible'
     $window.UpdateLayout()
     Update-ExpirationIndicator $null
+    if ($msg -eq 'Too many invalid credential attempts.') {
+      if ($script:LockoutTimer) { $script:LockoutTimer.Stop(); $script:LockoutTimer.Dispose() }
+      $script:LockoutTimer = New-Object System.Timers.Timer ($script:LockoutResetSeconds * 1000)
+      $script:LockoutTimer.AutoReset = $false
+      $script:LockoutTimer.Add_Elapsed({ Reset-FailedAuthCount })
+      $script:LockoutTimer.Start()
+      $btnRetry.Visibility = 'Visible'
+      $btnGet.IsEnabled = $false
+      $lockout = $true
+    }
   } finally {
     $window.Cursor = 'Arrow'
-    $btnGet.IsEnabled = $true
+    if (-not $lockout) { $btnGet.IsEnabled = $true }
   }
 })
+$btnRetry.Add_Click({ Reset-FailedAuthCount })
 
 # Enter -> Retrieve
 $tbComp.Add_KeyDown({
