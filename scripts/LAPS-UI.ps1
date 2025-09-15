@@ -1404,9 +1404,11 @@ function Load-Prefs {
 Load-Prefs
 Apply-Theme $cmbTheme.SelectedItem.Tag
 Apply-Language $(if ($cmbLanguage.SelectedItem) { $cmbLanguage.SelectedItem.Tag } else { 'English' })
-$tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+$tbComp.IsEnabled     = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+$btnHistory.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
 $pbPass.Add_PasswordChanged({
-    $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+    $tbComp.IsEnabled     = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+    $btnHistory.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
 })
 $cbRememberUser.Add_Checked({ Save-Prefs })
 $cbRememberUser.Add_Unchecked({ Save-Prefs })
