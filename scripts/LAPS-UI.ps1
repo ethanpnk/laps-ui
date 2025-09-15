@@ -8,9 +8,12 @@
 $UseLdaps = $false
 $script:ClipboardAutoClearSeconds = 20
 $CurrentVersion = '1.0.5'
+$script:MaxAuthAttempts = 3
+$script:FailedAuthCount = 0
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
+Add-Type -AssemblyName System.DirectoryServices.AccountManagement
 Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null
 
 Add-Type @"
@@ -95,6 +98,25 @@ function Get-DirectorySearcher {
       'msLAPS-Password','msLAPS-PasswordExpirationTime',
       'ms-Mcs-AdmPwd','ms-Mcs-AdmPwdExpirationTime'))
   $ds }
+
+function Test-AdCredential {
+  param(
+    [string]$User,
+    [string]$Password,
+    [string]$ServerOrDomain)
+  if ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Password)) { return $true }
+  try {
+    $ctxType = [System.DirectoryServices.AccountManagement.ContextType]::Domain
+    $ctx = if ([string]::IsNullOrWhiteSpace($ServerOrDomain)) {
+      New-Object System.DirectoryServices.AccountManagement.PrincipalContext($ctxType)
+    } else {
+      New-Object System.DirectoryServices.AccountManagement.PrincipalContext($ctxType,$ServerOrDomain)
+    }
+    $ctx.ValidateCredentials($User,$Password)
+  } catch {
+    $false
+  }
+}
 
 function Normalize-ComputerName { param([string]$InputName)
   if ([string]::IsNullOrWhiteSpace($InputName)) { return "" }
@@ -1627,6 +1649,18 @@ $btnGet.Add_Click({
     $cred = $null
     if (-not [string]::IsNullOrWhiteSpace($tbUser.Text)) {
       if ([string]::IsNullOrWhiteSpace($pbPass.Password)) { throw "You entered a username without a password." }
+      if ($script:FailedAuthCount -ge $script:MaxAuthAttempts) { throw "Too many invalid credential attempts." }
+      if (-not (Test-AdCredential -User $tbUser.Text -Password $pbPass.Password -ServerOrDomain $tbServer.Text)) {
+        $script:FailedAuthCount++
+        $remaining = $script:MaxAuthAttempts - $script:FailedAuthCount
+        if ($remaining -le 0) {
+          throw "Too many invalid credential attempts."
+        } else {
+          throw ("Invalid credentials. {0} attempt(s) remaining." -f $remaining)
+        }
+      } else {
+        $script:FailedAuthCount = 0
+      }
       $secure = ConvertTo-SecureString -String $pbPass.Password -AsPlainText -Force
       $cred = New-Object System.Management.Automation.PSCredential ($tbUser.Text, $secure)
       if ($cbRememberUser.IsChecked -or $cbRememberServer.IsChecked) { Save-Prefs }
