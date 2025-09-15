@@ -1,4 +1,4 @@
-param(
+﻿param(
   [int]$LockoutResetSeconds = 60
 )
 
@@ -12,7 +12,7 @@ param(
 $UseLdaps = $false
 $script:ClipboardAutoClearSeconds = 20
 $script:LockoutResetSeconds = $LockoutResetSeconds
-$CurrentVersion = '1.0.5'
+$CurrentVersion = '1.0.6'
 $script:LockoutTimer = $null
 $script:MaxAuthAttempts = 3
 $script:FailedAuthCount = 0
