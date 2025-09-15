@@ -244,6 +244,9 @@ function Check-ForUpdates {
 function Start-AppUpdate {
   param($Info, $Window)
   try {
+    if (-not $Info -or [string]::IsNullOrWhiteSpace($Info.Url)) {
+      throw "Update information is missing a download URL"
+    }
     $tmp = Join-Path ([IO.Path]::GetTempPath()) "LAPS-UI-$($Info.Version).exe"
     Invoke-WebRequest -Uri $Info.Url -OutFile $tmp -UseBasicParsing -Headers @{ 'User-Agent' = 'LAPS-UI' }
     Unblock-File -Path $tmp -ErrorAction SilentlyContinue
@@ -279,7 +282,7 @@ function Show-UpdatePrompt {
   $btnUpdate.Content = ($t.btnUpdateTo -f $Info.Version)
   $btnUpdate.Visibility = 'Visible'
   $btnIgnore.Visibility = 'Visible'
-  $btnUpdate.Tag = { Start-AppUpdate -Info $Info -Window $window }
+  $btnUpdate.Tag = { Start-AppUpdate -Info $script:LastUpdateInfo -Window $window }
   $btnUpdate.Add_Click($btnUpdate.Tag)
   $btnIgnore.Tag = {
     $script:Prefs.IgnoreVersion = $Info.Version
