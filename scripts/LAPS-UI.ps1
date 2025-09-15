@@ -440,7 +440,7 @@ Start-Process -FilePath $Exe
 </Style>
   </Window.Resources>
 
-  <TabControl Margin="16" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}" BorderThickness="0">
+  <TabControl Margin="0" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}" BorderThickness="0">
     <TabItem Header="Main" x:Name="tabMain">
       <Grid Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
         <Grid.RowDefinitions>
@@ -554,7 +554,7 @@ Start-Process -FilePath $Exe
     </Grid>
   </TabItem>
   <TabItem Header="Settings" x:Name="tabSettings">
-    <StackPanel Margin="10" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
+    <StackPanel Margin="0" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
       <GroupBox Header="Security" x:Name="gbSecurity">
         <StackPanel>
           <CheckBox x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="0,0,0,8"/>
