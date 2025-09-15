@@ -363,7 +363,6 @@ Start-Process -FilePath $Exe
     <Style TargetType="TabItem">
       <Setter Property="Foreground" Value="#EEEEEE"/>
       <Setter Property="Padding" Value="14,8"/>
-      <Setter Property="Margin" Value="0,0,8,0"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="Template">
@@ -372,6 +371,7 @@ Start-Process -FilePath $Exe
             <Border x:Name="Bd"
                     Background="#2D2D2D"
                     CornerRadius="8"
+                    Margin="0,0,8,0"
                     Padding="{TemplateBinding Padding}"
                     SnapsToDevicePixels="True">
               <ContentPresenter ContentSource="Header"
@@ -753,7 +753,6 @@ $lightThemeXaml = @"
   <Style TargetType="TabItem">
     <Setter Property="Foreground" Value="#333333"/>
     <Setter Property="Padding" Value="14,8"/>
-    <Setter Property="Margin" Value="0,0,8,0"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
     <Setter Property="Template">
@@ -764,6 +763,7 @@ $lightThemeXaml = @"
                   BorderBrush="#CCCCCC"
                   BorderThickness="1"
                   CornerRadius="8"
+                  Margin="0,0,8,0"
                   Padding="{TemplateBinding Padding}"
                   SnapsToDevicePixels="True">
             <ContentPresenter ContentSource="Header"
