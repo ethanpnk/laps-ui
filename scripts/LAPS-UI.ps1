@@ -353,6 +353,11 @@ Start-Process -FilePath $Exe
   </Window.Resources>
 
   <TabControl Margin="16" Background="#1E1E1E" BorderThickness="0">
+    <TabControl.Resources>
+      <Style TargetType="TabItem">
+        <Setter Property="Margin" Value="0,0,8,0"/>
+      </Style>
+    </TabControl.Resources>
     <TabItem Header="Main">
       <Grid Background="#1E1E1E">
         <Grid.RowDefinitions>
