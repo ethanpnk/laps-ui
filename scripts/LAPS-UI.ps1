@@ -1,4 +1,8 @@
-﻿# LAPS-UI.ps1 - WPF Dark, PS 5.1 (STA)
+﻿param(
+  [int]$LockoutResetSeconds = 60
+)
+
+# LAPS-UI.ps1 - WPF Dark, PS 5.1 (STA)
 # LDAP by default, optional LDAPS, modern dark UI, 20s countdown
 # Read-only "LAPS password" field + reliable green "cleared" message
 # Remember user & controller/domain (local JSON), update checker
@@ -6,12 +10,26 @@
 
 # --- Config ---
 $UseLdaps = $false
-$ClipboardAutoClearSeconds = 20
-$CurrentVersion = '1.0.5'
+$script:ClipboardAutoClearSeconds = 20
+$script:LockoutResetSeconds = $LockoutResetSeconds
+$CurrentVersion = '1.0.6'
+$script:LockoutTimer = $null
+$script:MaxAuthAttempts = 3
+$script:FailedAuthCount = 0
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 Add-Type -AssemblyName System.DirectoryServices
+Add-Type -AssemblyName System.DirectoryServices.AccountManagement
 Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null
+
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class DwmApi {
+  [DllImport("dwmapi.dll")]
+  public static extern int DwmSetWindowAttribute(IntPtr hWnd, int attr, ref int attrValue, int attrSize);
+}
+"@
 
 # ---------- LDAP helpers ----------
 function Convert-FileTime { param([object]$Value)
@@ -86,6 +104,25 @@ function Get-DirectorySearcher {
       'msLAPS-Password','msLAPS-PasswordExpirationTime',
       'ms-Mcs-AdmPwd','ms-Mcs-AdmPwdExpirationTime'))
   $ds }
+
+function Test-AdCredential {
+  param(
+    [string]$User,
+    [string]$Password,
+    [string]$ServerOrDomain)
+  if ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Password)) { return $true }
+  try {
+    $ctxType = [System.DirectoryServices.AccountManagement.ContextType]::Domain
+    $ctx = if ([string]::IsNullOrWhiteSpace($ServerOrDomain)) {
+      New-Object System.DirectoryServices.AccountManagement.PrincipalContext($ctxType)
+    } else {
+      New-Object System.DirectoryServices.AccountManagement.PrincipalContext($ctxType,$ServerOrDomain)
+    }
+    $ctx.ValidateCredentials($User,$Password)
+  } catch {
+    $false
+  }
+}
 
 function Normalize-ComputerName { param([string]$InputName)
   if ([string]::IsNullOrWhiteSpace($InputName)) { return "" }
@@ -231,6 +268,26 @@ Start-Process -FilePath $Exe
     [System.Windows.MessageBox]::Show("Update failed: $($_.Exception.Message)", 'Update', 'OK', 'Error') | Out-Null
   }
 }
+
+function Show-UpdatePrompt {
+  param($Info)
+  $script:LastUpdateInfo = $Info
+  if ($btnUpdate.Tag) { $btnUpdate.Remove_Click($btnUpdate.Tag) }
+  if ($btnIgnore.Tag) { $btnIgnore.Remove_Click($btnIgnore.Tag) }
+  $btnUpdate.Content = ($t.btnUpdateTo -f $Info.Version)
+  $btnUpdate.Visibility = 'Visible'
+  $btnIgnore.Visibility = 'Visible'
+  $btnUpdate.Tag = { Start-AppUpdate -Info $Info -Window $window }
+  $btnUpdate.Add_Click($btnUpdate.Tag)
+  $btnIgnore.Tag = {
+    $script:Prefs.IgnoreVersion = $Info.Version
+    Save-Prefs
+    $btnUpdate.Visibility='Collapsed'
+    $btnIgnore.Visibility='Collapsed'
+    $lblUpdateStatus.Text = ''
+  }
+  $btnIgnore.Add_Click($btnIgnore.Tag)
+}
 # ---------- XAML (Dark) ----------
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -240,6 +297,7 @@ Start-Process -FilePath $Exe
         WindowStartupLocation="CenterScreen"
         Background="#1E1E1E" Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13">
   <Window.Resources>
+    <SolidColorBrush x:Key="LabelBrush" Color="#BEBEBE"/>
     <Style x:Key="AccentButton" TargetType="Button">
       <Setter Property="Background" Value="#0A84FF"/>
       <Setter Property="Foreground" Value="White"/>
@@ -335,7 +393,7 @@ Start-Process -FilePath $Exe
                     BorderThickness="{TemplateBinding BorderThickness}" Margin="0,8,0,0">
               <DockPanel LastChildFill="True">
                 <Border DockPanel.Dock="Top" Background="#2B2B2B" Padding="8,4" CornerRadius="8,8,0,0">
-                  <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="#BEBEBE"/>
+                  <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="{DynamicResource LabelBrush}"/>
                 </Border>
                 <ContentPresenter Margin="{TemplateBinding Padding}"/>
               </DockPanel>
@@ -349,16 +407,97 @@ Start-Process -FilePath $Exe
       <Setter Property="Foreground" Value="#E0E0E0"/>
       <Setter Property="Margin" Value="0,4,0,0"/>
     </Style>
+
+    <Style TargetType="TabItem">
+      <Setter Property="Foreground" Value="#EEEEEE"/>
+      <Setter Property="Padding" Value="14,8"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border x:Name="Bd"
+                    Background="#2D2D2D"
+                    CornerRadius="8"
+                    Margin="0,0,8,0"
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter ContentSource="Header"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter TargetName="Bd" Property="Background" Value="#0A84FF"/>
+                <Setter TargetName="Bd" Property="Effect">
+                  <Setter.Value>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.35"/>
+                  </Setter.Value>
+                </Setter>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+<Style TargetType="TabControl">
+  <Setter Property="Background" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"/>
+  <Setter Property="BorderThickness" Value="0"/>
+  <Setter Property="Template">
+    <Setter.Value>
+      <ControlTemplate TargetType="TabControl">
+        <Grid SnapsToDevicePixels="True">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+
+          <!-- Barre d'onglets -->
+          <TabPanel x:Name="HeaderPanel"
+                    IsItemsHost="True"
+                    Margin="12,12,20,0"
+                    KeyboardNavigation.TabIndex="1"
+                    Panel.ZIndex="1"
+                    Background="{TemplateBinding Background}"/>
+
+          <!-- Zone de contenu -->
+          <Border Grid.Row="1"
+                  Margin="12"
+                  Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"
+                  CornerRadius="10"
+                  BorderBrush="#3E3E42"
+                  BorderThickness="1"
+                  Padding="12">
+            <ContentPresenter x:Name="PART_SelectedContentHost"
+                              Margin="0"
+                              ContentSource="SelectedContent"
+                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+          </Border>
+        </Grid>
+      </ControlTemplate>
+    </Setter.Value>
+  </Setter>
+</Style>
   </Window.Resources>
 
-  <Grid Margin="16">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-      </Grid.RowDefinitions>
+  <TabControl Margin="0" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}" BorderThickness="0">
+    <TabItem Header="Main" x:Name="tabMain">
+      <Grid Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
       <!-- Credentials & AD target side by side -->
       <Grid Grid.Row="0" Margin="0,0,0,14">
@@ -367,51 +506,49 @@ Start-Process -FilePath $Exe
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <GroupBox Grid.Column="0" Header="Credentials" Margin="0,0,8,0">
+        <GroupBox Grid.Column="0" Header="Credentials" Margin="0,0,8,0" x:Name="gbCreds">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="User (user@domain)" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" x:Name="lblUser"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbUser"/>
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Password" Margin="0,8,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" x:Name="lblPass"/>
             <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="pbPass" Margin="0,8,0,0"/>
-            <CheckBox Grid.Row="2" Grid.Column="1" x:Name="cbRememberUser" Content="Remember user" Margin="0,8,0,0"/>
           </Grid>
         </GroupBox>
 
-        <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,0">
+        <GroupBox Grid.Column="1" Header="Active Directory Target" Margin="8,0,0,0" x:Name="gbAD">
           <Grid>
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Controller/Domain" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}" x:Name="lblController"/>
             <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbServer" Text=""/>
-            <CheckBox  Grid.Row="0" Grid.Column="2" x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="12,0,0,0" VerticalAlignment="Center"/>
-            <CheckBox  Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="cbRememberServer" Content="Remember controller/domain" Margin="0,8,0,0"/>
           </Grid>
         </GroupBox>
       </Grid>
 
       <!-- Search -->
-      <GroupBox Grid.Row="1" Header="Search">
+      <GroupBox Grid.Row="1" Header="Search" x:Name="gbSearch">
         <Grid>
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
-          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="#BEBEBE"/>
+          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Computer name" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}" x:Name="lblCompName"/>
           <TextBox   Grid.Row="0" Grid.Column="1" x:Name="tbComp"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource IconButton}" Margin="12,0,0,0" ToolTip="History"/>
           <Button   Grid.Row="0" Grid.Column="3" x:Name="btnGet" Content="Retrieve" Style="{StaticResource AccentButton}" IsDefault="True" Margin="12,0,0,0"/>
+          <Button   Grid.Row="0" Grid.Column="4" x:Name="btnRetry" Content="Retry" Style="{StaticResource AccentButton}" Margin="12,0,0,0" Visibility="Collapsed"/>
           <Popup    x:Name="popCompSuggest" PlacementTarget="{Binding ElementName=tbComp}" Placement="Bottom" StaysOpen="False">
             <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
               <ListBox x:Name="lbCompSuggest" MaxHeight="200" Width="{Binding ElementName=tbComp, Path=ActualWidth}" Background="#2D2D2D" Foreground="#EEEEEE"/>
@@ -437,13 +574,13 @@ Start-Process -FilePath $Exe
       </GroupBox>
 
       <!-- LAPS Password -->
-      <GroupBox Grid.Row="3" Header="LAPS Password">
+      <GroupBox Grid.Row="3" Header="LAPS Password" x:Name="gbPwd">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
 
           <!-- NEW: RichTextBox for colorized clear text -->
@@ -455,12 +592,7 @@ Start-Process -FilePath $Exe
           <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbShow" Content="Show" Margin="12,6,12,0" VerticalAlignment="Center"/>
           <Button   Grid.Row="0" Grid.Column="2" x:Name="btnCopy" Content="Copy" Style="{StaticResource AccentButton}" IsEnabled="False"/>
 
-          <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,8,0,0">
-            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="#BEBEBE"/>
-            <TextBox x:Name="tbClipboardSecs" Width="50"/>
-          </StackPanel>
-
-          <TextBlock Grid.Row="2" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
+          <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
         </Grid>
       </GroupBox>
 
@@ -469,14 +601,729 @@ Start-Process -FilePath $Exe
         <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
     </Grid>
+  </TabItem>
+  <TabItem Header="Settings" x:Name="tabSettings">
+    <StackPanel Margin="0" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
+      <GroupBox Header="Security" x:Name="gbSecurity">
+        <StackPanel>
+          <CheckBox x:Name="cbLdaps" Content="Use LDAPS (TLS 636)" Margin="0,0,0,8"/>
+          <CheckBox x:Name="cbClipboardAutoClear" Content="Enable clipboard auto-clear" IsChecked="True" Margin="0,0,0,8"/>
+          <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
+            <TextBlock Text="Clipboard delay (s)" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" x:Name="lblClipboardDelay"/>
+            <TextBox x:Name="tbClipboardSecs" Width="50"/>
+          </StackPanel>
+        </StackPanel>
+      </GroupBox>
+      <GroupBox Header="Preferences" x:Name="gbPrefs">
+        <StackPanel>
+          <CheckBox x:Name="cbRememberUser" Content="Remember user"/>
+          <CheckBox x:Name="cbRememberServer" Content="Remember controller/domain"/>
+          <StackPanel Orientation="Horizontal">
+            <CheckBox x:Name="cbAutoUpdate" Content="Check for updates on launch" IsChecked="True"/>
+            <Button x:Name="btnCheckUpdate" Margin="8,0,0,0" Style="{StaticResource IconButton}">
+              <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE72C;"/>
+            </Button>
+            <TextBlock x:Name="lblUpdateStatus" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
+          </StackPanel>
+          <CheckBox x:Name="cbConfirmCopy" Content="Confirm before copying"/>
+        </StackPanel>
+      </GroupBox>
+      <GroupBox Header="Appearance" x:Name="gbAppearance">
+        <StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Theme" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" x:Name="lblTheme"/>
+            <ComboBox x:Name="cmbTheme" Width="120" SelectedIndex="0">
+              <ComboBoxItem Content="Dark" Tag="Dark"/>
+              <ComboBoxItem Content="Light" Tag="Light"/>
+            </ComboBox>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Language" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" x:Name="lblLanguage"/>
+            <ComboBox x:Name="cmbLanguage" Width="120" SelectedIndex="0">
+              <ComboBoxItem Content="English" Tag="English"/>
+              <ComboBoxItem Content="French" Tag="French"/>
+              <ComboBoxItem Content="Spanish" Tag="Spanish"/>
+              <ComboBoxItem Content="Italian" Tag="Italian"/>
+              <ComboBoxItem Content="German" Tag="German"/>
+              <ComboBoxItem Content="Portuguese" Tag="Portuguese"/>
+              <ComboBoxItem Content="Chinese" Tag="Chinese"/>
+              <ComboBoxItem Content="Arabic" Tag="Arabic"/>
+            </ComboBox>
+          </StackPanel>
+        </StackPanel>
+      </GroupBox>
+    </StackPanel>
+  </TabItem>
+  </TabControl>
 </Window>
-"@ 
+"@
 
 # ---------- Build UI ----------
 $reader = (New-Object System.Xml.XmlNodeReader $xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
+$script:DarkResources = $window.Resources
+$lightThemeXaml = @"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="LabelBrush" Color="#333333"/>
+  <Style x:Key="AccentButton" TargetType="Button">
+    <Setter Property="Background" Value="#0A84FF"/>
+    <Setter Property="Foreground" Value="White"/>
+    <Setter Property="FontSize"   Value="14"/>
+    <Setter Property="MinHeight"  Value="36"/>
+    <Setter Property="MinWidth"   Value="110"/>
+    <Setter Property="Padding"    Value="16,10"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="HorizontalAlignment" Value="Right"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border Background="{TemplateBinding Background}"
+                  CornerRadius="6" Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#0C60C0"/></Trigger>
+      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource AccentButton}">
+    <Setter Property="Width"    Value="32"/>
+    <Setter Property="Height"   Value="32"/>
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="MinHeight" Value="0"/>
+    <Setter Property="Padding"  Value="0"/>
+  </Style>
+
+  <Style TargetType="TextBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+            <ScrollViewer x:Name="PART_ContentHost"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="RichTextBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="FontFamily" Value="Cascadia Code,Consolas"/>
+    <Setter Property="FontSize" Value="20"/>
+    <Setter Property="IsReadOnly" Value="True"/>
+  </Style>
+
+  <Style TargetType="PasswordBox">
+    <Setter Property="Background" Value="#FFFFFF"/>
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="PasswordBox">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+            <ScrollViewer x:Name="PART_ContentHost"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="GroupBox">
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="12"/>
+    <Setter Property="Margin" Value="0,0,0,14"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type GroupBox}">
+          <Border CornerRadius="8" Background="#FFFFFF" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" Margin="0,8,0,0">
+            <DockPanel LastChildFill="True">
+              <Border DockPanel.Dock="Top" Background="#F0F0F0" Padding="8,4" CornerRadius="8,8,0,0">
+                <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" Foreground="{DynamicResource LabelBrush}"/>
+              </Border>
+              <ContentPresenter Margin="{TemplateBinding Padding}"/>
+            </DockPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="CheckBox">
+    <Setter Property="Foreground" Value="#1E1E1E"/>
+    <Setter Property="Margin" Value="0,4,0,0"/>
+  </Style>
+  <Style TargetType="TabControl">
+    <Setter Property="Background" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TabControl">
+          <Grid SnapsToDevicePixels="True">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TabPanel x:Name="HeaderPanel"
+                      IsItemsHost="True"
+                      Margin="12,12,20,0"
+                      KeyboardNavigation.TabIndex="1"
+                      Panel.ZIndex="1"
+                      Background="{TemplateBinding Background}"/>
+
+            <Border Grid.Row="1"
+                    Margin="12"
+                    Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}"
+                    CornerRadius="10"
+                    BorderBrush="#CCCCCC"
+                    BorderThickness="1"
+                    Padding="12">
+              <ContentPresenter x:Name="PART_SelectedContentHost"
+                                Margin="0"
+                                ContentSource="SelectedContent"
+                                SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+            </Border>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="TabItem">
+    <Setter Property="Foreground" Value="#333333"/>
+    <Setter Property="Padding" Value="14,8"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TabItem">
+          <Border x:Name="Bd"
+                  Background="#F0F0F0"
+                  BorderBrush="#CCCCCC"
+                  BorderThickness="1"
+                  CornerRadius="8"
+                  Margin="0,0,8,0"
+                  Padding="{TemplateBinding Padding}"
+                  SnapsToDevicePixels="True">
+            <ContentPresenter ContentSource="Header"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="#E5E5E5"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.5"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter Property="Foreground" Value="White"/>
+              <Setter TargetName="Bd" Property="Background" Value="#0A84FF"/>
+              <Setter TargetName="Bd" Property="BorderBrush" Value="#0A84FF"/>
+              <Setter TargetName="Bd" Property="Effect">
+                <Setter.Value>
+                  <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.35"/>
+                </Setter.Value>
+              </Setter>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+</ResourceDictionary>
+"@
+$lightReader = New-Object System.Xml.XmlNodeReader ([xml]$lightThemeXaml)
+$script:LightResources = [Windows.Markup.XamlReader]::Load($lightReader)
+
+function Apply-Theme {
+  param([string]$Theme)
+  if ($Theme -eq 'Light') {
+    $window.Resources = $script:LightResources
+    $window.Background = [Windows.Media.Brushes]::White
+    $window.Foreground = [Windows.Media.Brushes]::Black
+    $useDark = 0
+  } else {
+    $window.Resources = $script:DarkResources
+    $window.Background = New-Object Windows.Media.SolidColorBrush ([Windows.Media.ColorConverter]::ConvertFromString('#1E1E1E'))
+    $window.Foreground = [Windows.Media.Brushes]::White
+    $useDark = 1
+  }
+
+  $helper = New-Object System.Windows.Interop.WindowInteropHelper($window)
+  $hWnd = $helper.EnsureHandle()
+  [DwmApi]::DwmSetWindowAttribute($hWnd, 19, [ref]$useDark, 4) | Out-Null
+  [DwmApi]::DwmSetWindowAttribute($hWnd, 20, [ref]$useDark, 4) | Out-Null
+}
+
+# Localization
+$translations = @{
+  English = @{
+    tabMain         = 'Main'
+    tabSettings     = 'Settings'
+    gbCreds         = 'Credentials'
+    gbAD            = 'Active Directory Target'
+    gbSearch        = 'Search'
+    gbDetails       = 'Details'
+    gbPwd           = 'LAPS Password'
+    lblUser         = 'User (user@domain)'
+    lblPass         = 'Password'
+    lblController   = 'Controller/Domain'
+    lblCompName     = 'Computer name'
+    btnGet          = 'Retrieve'
+    btnRetry        = 'Retry'
+    btnUpdate       = 'Update'
+    btnUpdateTo     = 'Update to v{0}'
+    btnIgnore       = 'Ignore'
+    cbShow          = 'Show'
+    btnCopy         = 'Copy'
+    gbSecurity      = 'Security'
+    cbLdaps         = 'Use LDAPS (TLS 636)'
+    cbClipboardAutoClear = 'Enable clipboard auto-clear'
+    lblClipboardDelay = 'Clipboard delay (s)'
+    gbPrefs         = 'Preferences'
+    cbRememberUser  = 'Remember user'
+    cbRememberServer= 'Remember controller/domain'
+    cbAutoUpdate    = 'Check for updates on launch'
+    btnCheckUpdate_ToolTip  = 'Check now'
+    msgNoUpdate     = 'You are up to date.'
+    msgUpdateAvailable = 'Update available: v{0}'
+    cbConfirmCopy   = 'Confirm before copying'
+    gbAppearance    = 'Appearance'
+    lblTheme        = 'Theme'
+    lblLanguage     = 'Language'
+    themeDark       = 'Dark'
+    themeLight      = 'Light'
+    langEnglish     = 'English'
+    langFrench      = 'French'
+    langSpanish     = 'Spanish'
+    langItalian     = 'Italian'
+    langGerman      = 'German'
+    langPortuguese  = 'Portuguese'
+    langChinese     = 'Chinese'
+    langArabic      = 'Arabic'
+    btnHistory_ToolTip = 'History'
+  }
+  French = @{
+    tabMain         = 'Principal'
+    tabSettings     = 'Paramètres'
+    gbCreds         = 'Identifiants'
+    gbAD            = 'Cible Active Directory'
+    gbSearch        = 'Recherche'
+    gbDetails       = 'Détails'
+    gbPwd           = 'Mot de passe LAPS'
+    lblUser         = 'Utilisateur (utilisateur@domaine)'
+    lblPass         = 'Mot de passe'
+    lblController   = 'Contrôleur/Domaine'
+    lblCompName     = "Nom de l'ordinateur"
+    btnGet          = 'Récupérer'
+    btnRetry        = 'Réessayer'
+    btnUpdate       = 'Mettre à jour'
+    btnUpdateTo     = 'Mettre à jour vers v{0}'
+    btnIgnore       = 'Ignorer'
+    cbShow          = 'Afficher'
+    btnCopy         = 'Copier'
+    gbSecurity      = 'Sécurité'
+    cbLdaps         = 'Utiliser LDAPS (TLS 636)'
+    cbClipboardAutoClear = "Activer l'effacement automatique du presse-papiers"
+    lblClipboardDelay = 'Délai presse-papiers (s)'
+    gbPrefs         = 'Préférences'
+    cbRememberUser  = "Mémoriser l'utilisateur"
+    cbRememberServer= 'Mémoriser le contrôleur/domaine'
+    cbAutoUpdate    = 'Vérifier les mises à jour au lancement'
+    btnCheckUpdate_ToolTip  = 'Vérifier maintenant'
+    msgNoUpdate     = 'Vous êtes à jour.'
+    msgUpdateAvailable = 'Nouvelle version v{0} disponible.'
+    cbConfirmCopy   = 'Confirmer avant de copier'
+    gbAppearance    = 'Apparence'
+    lblTheme        = 'Thème'
+    lblLanguage     = 'Langue'
+    themeDark       = 'Sombre'
+    themeLight      = 'Clair'
+    langEnglish     = 'Anglais'
+    langFrench      = 'Français'
+    langSpanish     = 'Espagnol'
+    langItalian     = 'Italien'
+    langGerman      = 'Allemand'
+    langPortuguese  = 'Portugais'
+    langChinese     = 'Chinois'
+    langArabic      = 'Arabe'
+    btnHistory_ToolTip = 'Historique'
+  }
+  Spanish = @{
+    tabMain         = 'Principal'
+    tabSettings     = 'Configuración'
+    gbCreds         = 'Credenciales'
+    gbAD            = 'Destino de Active Directory'
+    gbSearch        = 'Búsqueda'
+    gbDetails       = 'Detalles'
+    gbPwd           = 'Contraseña LAPS'
+    lblUser         = 'Usuario (usuario@dominio)'
+    lblPass         = 'Contraseña'
+    lblController   = 'Controlador/Dominio'
+    lblCompName     = 'Nombre del equipo'
+    btnGet          = 'Obtener'
+    btnRetry        = 'Reintentar'
+    btnUpdate       = 'Actualizar'
+    btnUpdateTo     = 'Actualizar a v{0}'
+    btnIgnore       = 'Ignorar'
+    cbShow          = 'Mostrar'
+    btnCopy         = 'Copiar'
+    gbSecurity      = 'Seguridad'
+    cbLdaps         = 'Usar LDAPS (TLS 636)'
+    cbClipboardAutoClear = 'Habilitar borrado automático del portapapeles'
+    lblClipboardDelay = 'Retraso del portapapeles (s)'
+    gbPrefs         = 'Preferencias'
+    cbRememberUser  = 'Recordar usuario'
+    cbRememberServer= 'Recordar controlador/dominio'
+    cbAutoUpdate    = 'Buscar actualizaciones al iniciar'
+    btnCheckUpdate_ToolTip  = 'Buscar ahora'
+    msgNoUpdate     = 'Ya está actualizado.'
+    msgUpdateAvailable = 'Nueva versión v{0} disponible.'
+    cbConfirmCopy   = 'Confirmar antes de copiar'
+    gbAppearance    = 'Apariencia'
+    lblTheme        = 'Tema'
+    lblLanguage     = 'Idioma'
+    themeDark       = 'Oscuro'
+    themeLight      = 'Claro'
+    langEnglish     = 'Inglés'
+    langFrench      = 'Francés'
+    langSpanish     = 'Español'
+    langItalian     = 'Italiano'
+    langGerman      = 'Alemán'
+    langPortuguese  = 'Portugués'
+    langChinese     = 'Chino'
+    langArabic      = 'Árabe'
+    btnHistory_ToolTip = 'Historial'
+  }
+  Italian = @{
+    tabMain         = 'Principale'
+    tabSettings     = 'Impostazioni'
+    gbCreds         = 'Credenziali'
+    gbAD            = 'Destinazione Active Directory'
+    gbSearch        = 'Ricerca'
+    gbDetails       = 'Dettagli'
+    gbPwd           = 'Password LAPS'
+    lblUser         = 'Utente (utente@dominio)'
+    lblPass         = 'Password'
+    lblController   = 'Controller/Dominio'
+    lblCompName     = 'Nome del computer'
+    btnGet          = 'Recupera'
+    btnRetry        = 'Riprova'
+    btnUpdate       = 'Aggiorna'
+    btnUpdateTo     = 'Aggiorna a v{0}'
+    btnIgnore       = 'Ignora'
+    cbShow          = 'Mostra'
+    btnCopy         = 'Copia'
+    gbSecurity      = 'Sicurezza'
+    cbLdaps         = 'Usa LDAPS (TLS 636)'
+    cbClipboardAutoClear = 'Abilita pulizia automatica degli appunti'
+    lblClipboardDelay = 'Ritardo appunti (s)'
+    gbPrefs         = 'Preferenze'
+    cbRememberUser  = 'Ricorda utente'
+    cbRememberServer= 'Ricorda controller/dominio'
+    cbAutoUpdate    = 'Verifica aggiornamenti all avvio'
+    btnCheckUpdate_ToolTip  = 'Verifica ora'
+    msgNoUpdate     = 'Sei aggiornato.'
+    msgUpdateAvailable = 'Nuova versione v{0} disponibile.'
+    cbConfirmCopy   = 'Conferma prima di copiare'
+    gbAppearance    = 'Aspetto'
+    lblTheme        = 'Tema'
+    lblLanguage     = 'Lingua'
+    themeDark       = 'Scuro'
+    themeLight      = 'Chiaro'
+    langEnglish     = 'Inglese'
+    langFrench      = 'Francese'
+    langSpanish     = 'Spagnolo'
+    langItalian     = 'Italiano'
+    langGerman      = 'Tedesco'
+    langPortuguese  = 'Portoghese'
+    langChinese     = 'Cinese'
+    langArabic      = 'Arabo'
+    btnHistory_ToolTip = 'Cronologia'
+  }
+  German = @{
+    tabMain         = 'Start'
+    tabSettings     = 'Einstellungen'
+    gbCreds         = 'Anmeldedaten'
+    gbAD            = 'Active Directory Ziel'
+    gbSearch        = 'Suche'
+    gbDetails       = 'Details'
+    gbPwd           = 'LAPS Passwort'
+    lblUser         = 'Benutzer (benutzer@domäne)'
+    lblPass         = 'Passwort'
+    lblController   = 'Controller/Domäne'
+    lblCompName     = 'Computername'
+    btnGet          = 'Abrufen'
+    btnRetry        = 'Erneut versuchen'
+    btnUpdate       = 'Aktualisieren'
+    btnUpdateTo     = 'Aktualisieren auf v{0}'
+    btnIgnore       = 'Ignorieren'
+    cbShow          = 'Anzeigen'
+    btnCopy         = 'Kopieren'
+    gbSecurity      = 'Sicherheit'
+    cbLdaps         = 'LDAPS verwenden (TLS 636)'
+    cbClipboardAutoClear = 'Zwischenablage automatisch löschen aktivieren'
+    lblClipboardDelay = 'Zwischenablage-Verzögerung (s)'
+    gbPrefs         = 'Voreinstellungen'
+    cbRememberUser  = 'Benutzer speichern'
+    cbRememberServer= 'Controller/Domäne speichern'
+    cbAutoUpdate    = 'Beim Start nach Updates suchen'
+    btnCheckUpdate_ToolTip  = 'Jetzt prüfen'
+    msgNoUpdate     = 'Sie sind auf dem neuesten Stand.'
+    msgUpdateAvailable = 'Neue Version v{0} verfügbar.'
+    cbConfirmCopy   = 'Vor dem Kopieren bestätigen'
+    gbAppearance    = 'Darstellung'
+    lblTheme        = 'Design'
+    lblLanguage     = 'Sprache'
+    themeDark       = 'Dunkel'
+    themeLight      = 'Hell'
+    langEnglish     = 'Englisch'
+    langFrench      = 'Französisch'
+    langSpanish     = 'Spanisch'
+    langItalian     = 'Italienisch'
+    langGerman      = 'Deutsch'
+    langPortuguese  = 'Portugiesisch'
+    langChinese     = 'Chinesisch'
+    langArabic      = 'Arabisch'
+    btnHistory_ToolTip = 'Verlauf'
+  }
+  Portuguese = @{
+    tabMain         = 'Principal'
+    tabSettings     = 'Configurações'
+    gbCreds         = 'Credenciais'
+    gbAD            = 'Destino do Active Directory'
+    gbSearch        = 'Pesquisar'
+    gbDetails       = 'Detalhes'
+    gbPwd           = 'Senha LAPS'
+    lblUser         = 'Usuário (usuario@domínio)'
+    lblPass         = 'Senha'
+    lblController   = 'Controlador/Domínio'
+    lblCompName     = 'Nome do computador'
+    btnGet          = 'Obter'
+    btnRetry        = 'Tentar novamente'
+    btnUpdate       = 'Atualizar'
+    btnUpdateTo     = 'Atualizar para v{0}'
+    btnIgnore       = 'Ignorar'
+    cbShow          = 'Mostrar'
+    btnCopy         = 'Copiar'
+    gbSecurity      = 'Segurança'
+    cbLdaps         = 'Usar LDAPS (TLS 636)'
+    cbClipboardAutoClear = 'Ativar limpeza automática da área de transferência'
+    lblClipboardDelay = 'Atraso da área de transferência (s)'
+    gbPrefs         = 'Preferências'
+    cbRememberUser  = 'Lembrar usuário'
+    cbRememberServer= 'Lembrar controlador/domínio'
+    cbAutoUpdate    = 'Verificar atualizações ao iniciar'
+    btnCheckUpdate_ToolTip  = 'Verificar agora'
+    msgNoUpdate     = 'Você está atualizado.'
+    msgUpdateAvailable = 'Nova versão v{0} disponível.'
+    cbConfirmCopy   = 'Confirmar antes de copiar'
+    gbAppearance    = 'Aparência'
+    lblTheme        = 'Tema'
+    lblLanguage     = 'Idioma'
+    themeDark       = 'Escuro'
+    themeLight      = 'Claro'
+    langEnglish     = 'Inglês'
+    langFrench      = 'Francês'
+    langSpanish     = 'Espanhol'
+    langItalian     = 'Italiano'
+    langGerman      = 'Alemão'
+    langPortuguese  = 'Português'
+    langChinese     = 'Chinês'
+    langArabic      = 'Árabe'
+    btnHistory_ToolTip = 'Histórico'
+  }
+  Chinese = @{
+    tabMain         = '主要'
+    tabSettings     = '设置'
+    gbCreds         = '凭据'
+    gbAD            = 'Active Directory 目标'
+    gbSearch        = '搜索'
+    gbDetails       = '详细信息'
+    gbPwd           = 'LAPS 密码'
+    lblUser         = '用户 (用户@域)'
+    lblPass         = '密码'
+    lblController   = '控制器/域'
+    lblCompName     = '计算机名'
+    btnGet          = '获取'
+    btnRetry        = '重试'
+    btnUpdate       = '更新'
+    btnUpdateTo     = '更新到 v{0}'
+    btnIgnore       = '忽略'
+    cbShow          = '显示'
+    btnCopy         = '复制'
+    gbSecurity      = '安全'
+    cbLdaps         = '使用 LDAPS (TLS 636)'
+    cbClipboardAutoClear = '启用剪贴板自动清除'
+    lblClipboardDelay = '剪贴板延迟 (秒)'
+    gbPrefs         = '首选项'
+    cbRememberUser  = '记住用户'
+    cbRememberServer= '记住控制器/域'
+    cbAutoUpdate    = '启动时检查更新'
+    btnCheckUpdate_ToolTip  = '立即检查'
+    msgNoUpdate     = '已是最新版本。'
+    msgUpdateAvailable = '发现新版本 v{0}。'
+    cbConfirmCopy   = '复制前确认'
+    gbAppearance    = '外观'
+    lblTheme        = '主题'
+    lblLanguage     = '语言'
+    themeDark       = '深色'
+    themeLight      = '浅色'
+    langEnglish     = '英语'
+    langFrench      = '法语'
+    langSpanish     = '西班牙语'
+    langItalian     = '意大利语'
+    langGerman      = '德语'
+    langPortuguese  = '葡萄牙语'
+    langChinese     = '中文'
+    langArabic      = '阿拉伯语'
+    btnHistory_ToolTip = '历史'
+  }
+  Arabic = @{
+    tabMain         = 'الرئيسية'
+    tabSettings     = 'الإعدادات'
+    gbCreds         = 'بيانات الاعتماد'
+    gbAD            = 'هدف Active Directory'
+    gbSearch        = 'بحث'
+    gbDetails       = 'تفاصيل'
+    gbPwd           = 'كلمة مرور LAPS'
+    lblUser         = 'المستخدم (المستخدم@المجال)'
+    lblPass         = 'كلمة المرور'
+    lblController   = 'المراقب/المجال'
+    lblCompName     = 'اسم الكمبيوتر'
+    btnGet          = 'استرجاع'
+    btnRetry        = 'إعادة المحاولة'
+    btnUpdate       = 'تحديث'
+    btnUpdateTo     = 'التحديث إلى v{0}'
+    btnIgnore       = 'تجاهل'
+    cbShow          = 'إظهار'
+    btnCopy         = 'نسخ'
+    gbSecurity      = 'الأمان'
+    cbLdaps         = 'استخدام LDAPS ‏(TLS 636)'
+    cbClipboardAutoClear = 'تمكين المسح التلقائي للحافظة'
+    lblClipboardDelay = 'تأخير الحافظة (ث)'
+    gbPrefs         = 'التفضيلات'
+    cbRememberUser  = 'تذكر المستخدم'
+    cbRememberServer= 'تذكر المراقب/المجال'
+    cbAutoUpdate    = 'التحقق من التحديثات عند التشغيل'
+    btnCheckUpdate_ToolTip  = 'تحقق الآن'
+    msgNoUpdate     = 'النظام محدث.'
+    msgUpdateAvailable = 'إصدار جديد v{0} متاح.'
+    cbConfirmCopy   = 'التأكيد قبل النسخ'
+    gbAppearance    = 'المظهر'
+    lblTheme        = 'السمة'
+    lblLanguage     = 'اللغة'
+    themeDark       = 'داكن'
+    themeLight      = 'فاتح'
+    langEnglish     = 'الإنجليزية'
+    langFrench      = 'الفرنسية'
+    langSpanish     = 'الإسبانية'
+    langItalian     = 'الإيطالية'
+    langGerman      = 'الألمانية'
+    langPortuguese  = 'البرتغالية'
+    langChinese     = 'الصينية'
+    langArabic      = 'العربية'
+    btnHistory_ToolTip = 'السجل'
+  }
+}
+
+function Apply-Language {
+  param([string]$Language)
+  if (-not $Language -or -not $translations.ContainsKey($Language)) { $Language = 'English' }
+  $script:t = $translations[$Language]
+  $tabMain.Header       = $t.tabMain
+  $tabSettings.Header   = $t.tabSettings
+  $gbCreds.Header       = $t.gbCreds
+  $gbAD.Header          = $t.gbAD
+  $gbSearch.Header      = $t.gbSearch
+  $gbDetails.Header     = $t.gbDetails
+  $gbPwd.Header         = $t.gbPwd
+  $lblUser.Text         = $t.lblUser
+  $lblPass.Text         = $t.lblPass
+  $lblController.Text   = $t.lblController
+  $lblCompName.Text     = $t.lblCompName
+  $btnGet.Content       = $t.btnGet
+  $btnRetry.Content     = $t.btnRetry
+  $btnUpdate.Content    = $t.btnUpdate
+  $btnIgnore.Content    = $t.btnIgnore
+  $cbShow.Content       = $t.cbShow
+  $btnCopy.Content      = $t.btnCopy
+  $gbSecurity.Header    = $t.gbSecurity
+  $cbLdaps.Content      = $t.cbLdaps
+  $cbClipboardAutoClear.Content = $t.cbClipboardAutoClear
+  $lblClipboardDelay.Text = $t.lblClipboardDelay
+  $gbPrefs.Header       = $t.gbPrefs
+  $cbRememberUser.Content = $t.cbRememberUser
+  $cbRememberServer.Content = $t.cbRememberServer
+  $cbAutoUpdate.Content = $t.cbAutoUpdate
+  $btnCheckUpdate.ToolTip = $t.btnCheckUpdate_ToolTip
+  $cbConfirmCopy.Content = $t.cbConfirmCopy
+  $gbAppearance.Header  = $t.gbAppearance
+  $lblTheme.Text        = $t.lblTheme
+  $lblLanguage.Text     = $t.lblLanguage
+  ($cmbTheme.Items[0]).Content = $t.themeDark
+  ($cmbTheme.Items[1]).Content = $t.themeLight
+  foreach ($item in $cmbLanguage.Items) {
+    switch ($item.Tag) {
+      'English'    { $item.Content = $t.langEnglish }
+      'French'     { $item.Content = $t.langFrench }
+      'Spanish'    { $item.Content = $t.langSpanish }
+      'Italian'    { $item.Content = $t.langItalian }
+      'German'     { $item.Content = $t.langGerman }
+      'Portuguese' { $item.Content = $t.langPortuguese }
+      'Chinese'    { $item.Content = $t.langChinese }
+      'Arabic'     { $item.Content = $t.langArabic }
+    }
+  }
+  $btnHistory.ToolTip   = $t.btnHistory_ToolTip
+  if ($btnUpdate.Visibility -eq 'Visible' -and $script:LastUpdateInfo) {
+    $btnUpdate.Content = $t.btnUpdateTo -f $script:LastUpdateInfo.Version
+    $lblUpdateStatus.Text = $t.msgUpdateAvailable -f $script:LastUpdateInfo.Version
+  } elseif ($lblUpdateStatus.Text) {
+    $lblUpdateStatus.Text = $t.msgNoUpdate
+  }
+}
+
 # Controls
+$tabMain       = $window.FindName("tabMain")
+$tabSettings   = $window.FindName("tabSettings")
+$gbCreds       = $window.FindName("gbCreds")
+$gbAD          = $window.FindName("gbAD")
+$gbSearch      = $window.FindName("gbSearch")
+$gbPwd         = $window.FindName("gbPwd")
+$gbSecurity    = $window.FindName("gbSecurity")
+$gbPrefs       = $window.FindName("gbPrefs")
+$gbAppearance  = $window.FindName("gbAppearance")
+$lblUser       = $window.FindName("lblUser")
+$lblPass       = $window.FindName("lblPass")
+$lblController = $window.FindName("lblController")
+$lblCompName   = $window.FindName("lblCompName")
+$lblClipboardDelay = $window.FindName("lblClipboardDelay")
+$lblTheme      = $window.FindName("lblTheme")
+$lblLanguage   = $window.FindName("lblLanguage")
 $tbUser         = $window.FindName("tbUser")
 $pbPass         = $window.FindName("pbPass")
 $tbServer       = $window.FindName("tbServer")
@@ -486,6 +1333,7 @@ $popCompSuggest = $window.FindName("popCompSuggest")
 $lbCompSuggest  = $window.FindName("lbCompSuggest")
 $btnHistory     = $window.FindName("btnHistory")
 $btnGet         = $window.FindName("btnGet")
+$btnRetry       = $window.FindName("btnRetry")
 $gbDetails      = $window.FindName("gbDetails")
 $txtDetails     = $window.FindName("txtDetails")
 $spExpire       = $window.FindName("spExpire")
@@ -497,15 +1345,23 @@ $cbShow         = $window.FindName("cbShow")
 $btnCopy        = $window.FindName("btnCopy")
 $lblCountdown   = $window.FindName("lblCountdown")
 $tbClipboardSecs = $window.FindName("tbClipboardSecs")
+$cbClipboardAutoClear = $window.FindName("cbClipboardAutoClear")
 $cbRememberUser = $window.FindName("cbRememberUser")
 $cbRememberServer = $window.FindName("cbRememberServer")
+$cbAutoUpdate   = $window.FindName("cbAutoUpdate")
+$btnCheckUpdate = $window.FindName("btnCheckUpdate")
+$lblUpdateStatus = $window.FindName("lblUpdateStatus")
+$cbConfirmCopy  = $window.FindName("cbConfirmCopy")
+$cmbTheme       = $window.FindName("cmbTheme")
+$cmbLanguage    = $window.FindName("cmbLanguage")
 $btnUpdate     = $window.FindName("btnUpdate")
 $btnIgnore     = $window.FindName("btnIgnore")
 
 # Init
 $cbLdaps.IsChecked = $UseLdaps
 $script:UseLdaps   = [bool]$cbLdaps.IsChecked
-$tbClipboardSecs.Text = $ClipboardAutoClearSeconds
+$script:LastUpdateInfo = $null
+$tbClipboardSecs.Text = $script:ClipboardAutoClearSeconds
 $script:CurrentLapsPassword = ""
 $script:DoneTimer = $null
 
@@ -537,14 +1393,19 @@ function Save-Prefs {
   $history = $script:Prefs.History
   $ignore  = $script:Prefs.IgnoreVersion
   $script:Prefs = @{
-    RememberUser     = [bool]$cbRememberUser.IsChecked
-    UserName         = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
-    RememberServer   = [bool]$cbRememberServer.IsChecked
-    ServerName       = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
-    UseLdaps         = [bool]$cbLdaps.IsChecked
-    ClipboardSeconds = $script:ClipboardAutoClearSeconds
-    History          = $history
-    IgnoreVersion    = $ignore
+    RememberUser        = [bool]$cbRememberUser.IsChecked
+    UserName            = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
+    RememberServer      = [bool]$cbRememberServer.IsChecked
+    ServerName          = $(if ($cbRememberServer.IsChecked) { Protect-String $tbServer.Text } else { $null })
+    UseLdaps            = [bool]$cbLdaps.IsChecked
+    AutoClearClipboard  = [bool]$cbClipboardAutoClear.IsChecked
+    ClipboardSeconds    = $script:ClipboardAutoClearSeconds
+    AutoUpdate          = [bool]$cbAutoUpdate.IsChecked
+    ConfirmCopy         = [bool]$cbConfirmCopy.IsChecked
+    Theme               = $cmbTheme.SelectedItem.Tag
+    Language            = $cmbLanguage.SelectedItem.Tag
+    History             = $history
+    IgnoreVersion       = $ignore
   }
   $persist = $script:Prefs.Clone()
   $persist.History = @($history | ForEach-Object { Protect-String $_ })
@@ -557,8 +1418,13 @@ function Load-Prefs {
       $loaded = Get-Content $PrefFile -Raw | ConvertFrom-Json
       if ($loaded.RememberUser) { $cbRememberUser.IsChecked = $true; if ($loaded.UserName) { $tbUser.Text = Unprotect-String $loaded.UserName } }
       if ($loaded.RememberServer) { $cbRememberServer.IsChecked = $true; if ($loaded.ServerName) { $tbServer.Text = Unprotect-String $loaded.ServerName } }
-      if ($loaded.UseLdaps) { $cbLdaps.IsChecked = [bool]$loaded.UseLdaps }
+      if ($null -ne $loaded.UseLdaps) { $cbLdaps.IsChecked = [bool]$loaded.UseLdaps }
+      if ($null -ne $loaded.AutoClearClipboard) { $cbClipboardAutoClear.IsChecked = [bool]$loaded.AutoClearClipboard }
       if ($loaded.ClipboardSeconds) { $script:ClipboardAutoClearSeconds = [int]$loaded.ClipboardSeconds }
+      if ($null -ne $loaded.AutoUpdate) { $cbAutoUpdate.IsChecked = [bool]$loaded.AutoUpdate }
+      if ($null -ne $loaded.ConfirmCopy) { $cbConfirmCopy.IsChecked = [bool]$loaded.ConfirmCopy }
+      if ($loaded.Theme) { $cmbTheme.SelectedItem = $cmbTheme.Items | Where-Object { $_.Tag -eq $loaded.Theme } }
+      if ($loaded.Language) { $cmbLanguage.SelectedItem = $cmbLanguage.Items | Where-Object { $_.Tag -eq $loaded.Language } }
       $hist = @()
       if ($loaded.History -is [System.Collections.IEnumerable]) {
         foreach ($enc in $loaded.History) {
@@ -575,9 +1441,13 @@ function Load-Prefs {
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
 Load-Prefs
-$tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+Apply-Theme $cmbTheme.SelectedItem.Tag
+Apply-Language $(if ($cmbLanguage.SelectedItem) { $cmbLanguage.SelectedItem.Tag } else { 'English' })
+$tbComp.IsEnabled     = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+$btnHistory.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
 $pbPass.Add_PasswordChanged({
-    $tbComp.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+    $tbComp.IsEnabled     = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
+    $btnHistory.IsEnabled = -not [string]::IsNullOrWhiteSpace($pbPass.Password)
 })
 $cbRememberUser.Add_Checked({ Save-Prefs })
 $cbRememberUser.Add_Unchecked({ Save-Prefs })
@@ -590,6 +1460,26 @@ $window.Add_Closed({ Save-Prefs })
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true;  Save-Prefs })
 $cbLdaps.Add_Unchecked({ $script:UseLdaps = $false; Save-Prefs })
 $tbClipboardSecs.Add_LostFocus({ Save-Prefs })
+$cbClipboardAutoClear.Add_Checked({ Save-Prefs })
+$cbClipboardAutoClear.Add_Unchecked({ Save-Prefs })
+$cbAutoUpdate.Add_Checked({ Save-Prefs })
+$cbAutoUpdate.Add_Unchecked({ Save-Prefs })
+$btnCheckUpdate.Add_Click({
+  $info = Check-ForUpdates -CurrentVersion $CurrentVersion
+  if ($info) {
+    Show-UpdatePrompt $info
+    $lblUpdateStatus.Text = $t.msgUpdateAvailable -f $info.Version
+  } else {
+    $script:LastUpdateInfo = $null
+    $btnUpdate.Visibility='Collapsed'
+    $btnIgnore.Visibility='Collapsed'
+    $lblUpdateStatus.Text = $t.msgNoUpdate
+  }
+})
+$cbConfirmCopy.Add_Checked({ Save-Prefs })
+$cbConfirmCopy.Add_Unchecked({ Save-Prefs })
+$cmbTheme.Add_SelectionChanged({ Apply-Theme $cmbTheme.SelectedItem.Tag; Save-Prefs })
+$cmbLanguage.Add_SelectionChanged({ Apply-Language $cmbLanguage.SelectedItem.Tag; Save-Prefs })
 $tbComp.Add_TextChanged({
     Update-ComputerSuggestions $tbComp.Text
     if ($gbDetails.Visibility -ne 'Collapsed') {
@@ -677,6 +1567,21 @@ function Update-ExpirationIndicator([nullable[DateTime]]$exp) {
   }
 }
 
+function Reset-FailedAuthCount {
+  $script:FailedAuthCount = 0
+  if ($script:LockoutTimer) {
+    $script:LockoutTimer.Stop()
+    $script:LockoutTimer.Dispose()
+    $script:LockoutTimer = $null
+  }
+  if ($btnRetry) {
+    $window.Dispatcher.Invoke({
+      $btnRetry.Visibility = 'Collapsed'
+      $btnGet.IsEnabled = $true
+    })
+  }
+}
+
 # Show/Hide clear text
 $cbShow.Add_Checked({
   Update-PasswordDisplay $script:CurrentLapsPassword
@@ -714,6 +1619,10 @@ $timer.Add_Tick({
 
 $btnCopy.Add_Click({
   if ([string]::IsNullOrWhiteSpace($script:CurrentLapsPassword)) { return }
+  if ($cbConfirmCopy.IsChecked) {
+    $res = [System.Windows.MessageBox]::Show("Copy password to clipboard?","Confirm",'YesNo','Question')
+    if ($res -ne 'Yes') { return }
+  }
   $usedWinRT = $false
   try {
     $winRtSupported = [Windows.Foundation.Metadata.ApiInformation]::IsMethodPresent(
@@ -734,24 +1643,29 @@ $btnCopy.Add_Click({
   [System.Windows.MessageBox]::Show(("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
     "Copied",'OK','Information') | Out-Null
 
-  $script:CountdownRemaining = $ClipboardAutoClearSeconds
-  $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
-  $lblCountdown.Foreground = '#FFA07A'
-  $lblCountdown.Visibility = 'Visible'
-  $timer.Stop(); $timer.Start()
+  if ($cbClipboardAutoClear.IsChecked) {
+    $script:CountdownRemaining = $script:ClipboardAutoClearSeconds
+    $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
+    $lblCountdown.Foreground = '#FFA07A'
+    $lblCountdown.Visibility = 'Visible'
+    $timer.Stop(); $timer.Start()
+  } else {
+    $lblCountdown.Visibility = 'Collapsed'
+  }
 })
 
 # ---------- Retrieve ----------
-$updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
+$updateInfo = $null
+if ($cbAutoUpdate.IsChecked) {
+  $updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
+}
 if ($updateInfo) {
-  $btnUpdate.Content = "Update to v$($updateInfo.Version)"
-  $btnUpdate.Visibility = 'Visible'
-  $btnIgnore.Visibility = 'Visible'
-  $btnUpdate.Add_Click({ Start-AppUpdate -Info $updateInfo -Window $window })
-  $btnIgnore.Add_Click({ $script:Prefs.IgnoreVersion = $updateInfo.Version; Save-Prefs; $btnUpdate.Visibility='Collapsed'; $btnIgnore.Visibility='Collapsed' })
+  Show-UpdatePrompt $updateInfo
+  $lblUpdateStatus.Text = $t.msgUpdateAvailable -f $updateInfo.Version
 }
 
 $btnGet.Add_Click({
+  $lockout = $false
   try {
     $popCompSuggest.IsOpen = $false
     $gbDetails.Visibility = 'Collapsed'
@@ -768,6 +1682,18 @@ $btnGet.Add_Click({
     $cred = $null
     if (-not [string]::IsNullOrWhiteSpace($tbUser.Text)) {
       if ([string]::IsNullOrWhiteSpace($pbPass.Password)) { throw "You entered a username without a password." }
+      if ($script:FailedAuthCount -ge $script:MaxAuthAttempts) { throw "Too many invalid credential attempts." }
+      if (-not (Test-AdCredential -User $tbUser.Text -Password $pbPass.Password -ServerOrDomain $tbServer.Text)) {
+        $script:FailedAuthCount++
+        $remaining = $script:MaxAuthAttempts - $script:FailedAuthCount
+        if ($remaining -le 0) {
+          throw "Too many invalid credential attempts."
+        } else {
+          throw ("Invalid credentials. {0} attempt(s) remaining." -f $remaining)
+        }
+      } else {
+        $script:FailedAuthCount = 0
+      }
       $secure = ConvertTo-SecureString -String $pbPass.Password -AsPlainText -Force
       $cred = New-Object System.Management.Automation.PSCredential ($tbUser.Text, $secure)
       if ($cbRememberUser.IsChecked -or $cbRememberServer.IsChecked) { Save-Prefs }
@@ -813,15 +1739,27 @@ $btnGet.Add_Click({
       Update-ExpirationIndicator $null
     }
   } catch {
-    $txtDetails.Text = "Error: $($_.Exception.Message)"
+    $msg = $_.Exception.Message
+    $txtDetails.Text = "Error: $msg"
     $gbDetails.Visibility = 'Visible'
     $window.UpdateLayout()
     Update-ExpirationIndicator $null
+    if ($msg -eq 'Too many invalid credential attempts.') {
+      if ($script:LockoutTimer) { $script:LockoutTimer.Stop(); $script:LockoutTimer.Dispose() }
+      $script:LockoutTimer = New-Object System.Timers.Timer ($script:LockoutResetSeconds * 1000)
+      $script:LockoutTimer.AutoReset = $false
+      $script:LockoutTimer.Add_Elapsed({ Reset-FailedAuthCount })
+      $script:LockoutTimer.Start()
+      $btnRetry.Visibility = 'Visible'
+      $btnGet.IsEnabled = $false
+      $lockout = $true
+    }
   } finally {
     $window.Cursor = 'Arrow'
-    $btnGet.IsEnabled = $true
+    if (-not $lockout) { $btnGet.IsEnabled = $true }
   }
 })
+$btnRetry.Add_Click({ Reset-FailedAuthCount })
 
 # Enter -> Retrieve
 $tbComp.Add_KeyDown({
