@@ -325,8 +325,8 @@ Start-Process -FilePath $Exe
 
     <Style TargetType="GroupBox">
       <Setter Property="Foreground" Value="#E0E0E0"/>
-      <Setter Property="BorderBrush" Value="#3E3E42"/>
-      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Padding" Value="12"/>
       <Setter Property="Margin" Value="0,0,0,14"/>
       <Setter Property="Template">
@@ -352,7 +352,7 @@ Start-Process -FilePath $Exe
     </Style>
   </Window.Resources>
 
-  <TabControl Margin="16" Background="#1E1E1E" BorderThickness="0">
+  <TabControl Margin="0" Background="#1E1E1E" BorderThickness="0">
     <TabItem Header="Main">
       <Grid Background="#1E1E1E">
         <Grid.RowDefinitions>
@@ -461,7 +461,7 @@ Start-Process -FilePath $Exe
 
       <StackPanel Grid.Row="4" Orientation="Horizontal">
         <Button x:Name="btnUpdate" Content="Update" Style="{StaticResource AccentButton}" Visibility="Collapsed"/>
-        <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
+        <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="12,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
     </Grid>
   </TabItem>
@@ -600,8 +600,8 @@ $lightThemeXaml = @"
 
   <Style TargetType="GroupBox">
     <Setter Property="Foreground" Value="#1E1E1E"/>
-    <Setter Property="BorderBrush" Value="#CCCCCC"/>
-    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="12"/>
     <Setter Property="Margin" Value="0,0,0,14"/>
     <Setter Property="Template">
