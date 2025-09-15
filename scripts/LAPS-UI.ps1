@@ -244,8 +244,12 @@ function Check-ForUpdates {
 function Start-AppUpdate {
   param($Info, $Window)
   try {
+    if (-not $Info -or [string]::IsNullOrWhiteSpace($Info.Url)) {
+      throw "Update information is missing a download URL"
+    }
     $tmp = Join-Path ([IO.Path]::GetTempPath()) "LAPS-UI-$($Info.Version).exe"
     Invoke-WebRequest -Uri $Info.Url -OutFile $tmp -UseBasicParsing -Headers @{ 'User-Agent' = 'LAPS-UI' }
+    Unblock-File -Path $tmp -ErrorAction SilentlyContinue
     if ($Info.Sha256) {
       $h = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
       if ($h -ne $Info.Sha256) { throw "SHA256 mismatch" }
@@ -258,6 +262,7 @@ while (Get-Process -Id $AppPid -ErrorAction SilentlyContinue) {
   Start-Sleep -Milliseconds 200
 }
 Copy-Item -Path $Tmp -Destination $Exe -Force
+Unblock-File -Path $Exe -ErrorAction SilentlyContinue
 Start-Process -FilePath $Exe
 '@
     $ps = Join-Path ([IO.Path]::GetTempPath()) 'laps-ui-update.ps1'
@@ -277,7 +282,7 @@ function Show-UpdatePrompt {
   $btnUpdate.Content = ($t.btnUpdateTo -f $Info.Version)
   $btnUpdate.Visibility = 'Visible'
   $btnIgnore.Visibility = 'Visible'
-  $btnUpdate.Tag = { Start-AppUpdate -Info $Info -Window $window }
+  $btnUpdate.Tag = { Start-AppUpdate -Info $script:LastUpdateInfo -Window $window }
   $btnUpdate.Add_Click($btnUpdate.Tag)
   $btnIgnore.Tag = {
     $script:Prefs.IgnoreVersion = $Info.Version
