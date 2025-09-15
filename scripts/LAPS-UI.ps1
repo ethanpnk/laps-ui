@@ -363,7 +363,7 @@ Start-Process -FilePath $Exe
     <Style TargetType="TabItem">
       <Setter Property="Foreground" Value="#EEEEEE"/>
       <Setter Property="Padding" Value="14,8"/>
-      <Setter Property="Margin" Value="0"/>
+      <Setter Property="Margin" Value="0,0,8,0"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="Template">
@@ -753,7 +753,7 @@ $lightThemeXaml = @"
   <Style TargetType="TabItem">
     <Setter Property="Foreground" Value="#333333"/>
     <Setter Property="Padding" Value="14,8"/>
-    <Setter Property="Margin" Value="0"/>
+    <Setter Property="Margin" Value="0,0,8,0"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
     <Setter Property="Template">
