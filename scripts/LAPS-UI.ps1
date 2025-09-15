@@ -1394,7 +1394,12 @@ $btnCheckUpdate.Add_Click({
   if ($info) {
     Show-UpdatePrompt $info
   } else {
-    [System.Windows.MessageBox]::Show($t.msgNoUpdate,'Update','OK','Information') | Out-Null
+    [System.Windows.MessageBox]::Show(
+      $t.msgNoUpdate,
+      'Update',
+      [System.Windows.MessageBoxButton]::OK,
+      [System.Windows.MessageBoxImage]::Information
+    ) | Out-Null
   }
 })
 $cbConfirmCopy.Add_Checked({ Save-Prefs })
