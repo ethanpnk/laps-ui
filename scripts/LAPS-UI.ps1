@@ -1575,7 +1575,10 @@ function Reset-FailedAuthCount {
     $script:LockoutTimer = $null
   }
   if ($btnRetry) {
-    $window.Dispatcher.Invoke({ $btnRetry.Visibility = 'Collapsed' })
+    $window.Dispatcher.Invoke({
+      $btnRetry.Visibility = 'Collapsed'
+      $btnGet.IsEnabled = $true
+    })
   }
 }
 
@@ -1662,6 +1665,7 @@ if ($updateInfo) {
 }
 
 $btnGet.Add_Click({
+  $lockout = $false
   try {
     $popCompSuggest.IsOpen = $false
     $gbDetails.Visibility = 'Collapsed'
@@ -1747,10 +1751,12 @@ $btnGet.Add_Click({
       $script:LockoutTimer.Add_Elapsed({ Reset-FailedAuthCount })
       $script:LockoutTimer.Start()
       $btnRetry.Visibility = 'Visible'
+      $btnGet.IsEnabled = $false
+      $lockout = $true
     }
   } finally {
     $window.Cursor = 'Arrow'
-    $btnGet.IsEnabled = $true
+    if (-not $lockout) { $btnGet.IsEnabled = $true }
   }
 })
 $btnRetry.Add_Click({ Reset-FailedAuthCount })
