@@ -240,6 +240,19 @@ Start-Process -FilePath $Exe
     [System.Windows.MessageBox]::Show("Update failed: $($_.Exception.Message)", 'Update', 'OK', 'Error') | Out-Null
   }
 }
+
+function Show-UpdatePrompt {
+  param($Info)
+  if ($btnUpdate.Tag) { $btnUpdate.Remove_Click($btnUpdate.Tag) }
+  if ($btnIgnore.Tag) { $btnIgnore.Remove_Click($btnIgnore.Tag) }
+  $btnUpdate.Content = "Update to v$($Info.Version)"
+  $btnUpdate.Visibility = 'Visible'
+  $btnIgnore.Visibility = 'Visible'
+  $btnUpdate.Tag = { Start-AppUpdate -Info $Info -Window $window }
+  $btnUpdate.Add_Click($btnUpdate.Tag)
+  $btnIgnore.Tag = { $script:Prefs.IgnoreVersion = $Info.Version; Save-Prefs; $btnUpdate.Visibility='Collapsed'; $btnIgnore.Visibility='Collapsed' }
+  $btnIgnore.Add_Click($btnIgnore.Tag)
+}
 # ---------- XAML (Dark) ----------
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -569,7 +582,10 @@ Start-Process -FilePath $Exe
         <StackPanel>
           <CheckBox x:Name="cbRememberUser" Content="Remember user"/>
           <CheckBox x:Name="cbRememberServer" Content="Remember controller/domain"/>
-          <CheckBox x:Name="cbAutoUpdate" Content="Check for updates on launch" IsChecked="True"/>
+          <StackPanel Orientation="Horizontal">
+            <CheckBox x:Name="cbAutoUpdate" Content="Check for updates on launch" IsChecked="True"/>
+            <Button x:Name="btnCheckUpdate" Content="Check now" Margin="8,0,0,0"/>
+          </StackPanel>
           <CheckBox x:Name="cbConfirmCopy" Content="Confirm before copying"/>
         </StackPanel>
       </GroupBox>
@@ -850,6 +866,8 @@ $translations = @{
     cbRememberUser  = 'Remember user'
     cbRememberServer= 'Remember controller/domain'
     cbAutoUpdate    = 'Check for updates on launch'
+    btnCheckUpdate  = 'Check now'
+    msgNoUpdate     = 'You are up to date.'
     cbConfirmCopy   = 'Confirm before copying'
     gbAppearance    = 'Appearance'
     lblTheme        = 'Theme'
@@ -891,6 +909,8 @@ $translations = @{
     cbRememberUser  = "Mémoriser l'utilisateur"
     cbRememberServer= 'Mémoriser le contrôleur/domaine'
     cbAutoUpdate    = 'Vérifier les mises à jour au lancement'
+    btnCheckUpdate  = 'Vérifier maintenant'
+    msgNoUpdate     = 'Vous êtes à jour.'
     cbConfirmCopy   = 'Confirmer avant de copier'
     gbAppearance    = 'Apparence'
     lblTheme        = 'Thème'
@@ -932,6 +952,8 @@ $translations = @{
     cbRememberUser  = 'Recordar usuario'
     cbRememberServer= 'Recordar controlador/dominio'
     cbAutoUpdate    = 'Buscar actualizaciones al iniciar'
+    btnCheckUpdate  = 'Buscar ahora'
+    msgNoUpdate     = 'Ya está actualizado.'
     cbConfirmCopy   = 'Confirmar antes de copiar'
     gbAppearance    = 'Apariencia'
     lblTheme        = 'Tema'
@@ -973,6 +995,8 @@ $translations = @{
     cbRememberUser  = 'Ricorda utente'
     cbRememberServer= 'Ricorda controller/dominio'
     cbAutoUpdate    = 'Verifica aggiornamenti all avvio'
+    btnCheckUpdate  = 'Verifica ora'
+    msgNoUpdate     = 'Sei aggiornato.'
     cbConfirmCopy   = 'Conferma prima di copiare'
     gbAppearance    = 'Aspetto'
     lblTheme        = 'Tema'
@@ -1014,6 +1038,8 @@ $translations = @{
     cbRememberUser  = 'Benutzer speichern'
     cbRememberServer= 'Controller/Domäne speichern'
     cbAutoUpdate    = 'Beim Start nach Updates suchen'
+    btnCheckUpdate  = 'Jetzt prüfen'
+    msgNoUpdate     = 'Sie sind auf dem neuesten Stand.'
     cbConfirmCopy   = 'Vor dem Kopieren bestätigen'
     gbAppearance    = 'Darstellung'
     lblTheme        = 'Design'
@@ -1055,6 +1081,8 @@ $translations = @{
     cbRememberUser  = 'Lembrar usuário'
     cbRememberServer= 'Lembrar controlador/domínio'
     cbAutoUpdate    = 'Verificar atualizações ao iniciar'
+    btnCheckUpdate  = 'Verificar agora'
+    msgNoUpdate     = 'Você está atualizado.'
     cbConfirmCopy   = 'Confirmar antes de copiar'
     gbAppearance    = 'Aparência'
     lblTheme        = 'Tema'
@@ -1096,6 +1124,8 @@ $translations = @{
     cbRememberUser  = '记住用户'
     cbRememberServer= '记住控制器/域'
     cbAutoUpdate    = '启动时检查更新'
+    btnCheckUpdate  = '立即检查'
+    msgNoUpdate     = '已是最新版本。'
     cbConfirmCopy   = '复制前确认'
     gbAppearance    = '外观'
     lblTheme        = '主题'
@@ -1137,6 +1167,8 @@ $translations = @{
     cbRememberUser  = 'تذكر المستخدم'
     cbRememberServer= 'تذكر المراقب/المجال'
     cbAutoUpdate    = 'التحقق من التحديثات عند التشغيل'
+    btnCheckUpdate  = 'تحقق الآن'
+    msgNoUpdate     = 'النظام محدث.'
     cbConfirmCopy   = 'التأكيد قبل النسخ'
     gbAppearance    = 'المظهر'
     lblTheme        = 'السمة'
@@ -1183,6 +1215,7 @@ function Apply-Language {
   $cbRememberUser.Content = $t.cbRememberUser
   $cbRememberServer.Content = $t.cbRememberServer
   $cbAutoUpdate.Content = $t.cbAutoUpdate
+  $btnCheckUpdate.Content = $t.btnCheckUpdate
   $cbConfirmCopy.Content = $t.cbConfirmCopy
   $gbAppearance.Header  = $t.gbAppearance
   $lblTheme.Text        = $t.lblTheme
@@ -1245,6 +1278,7 @@ $cbClipboardAutoClear = $window.FindName("cbClipboardAutoClear")
 $cbRememberUser = $window.FindName("cbRememberUser")
 $cbRememberServer = $window.FindName("cbRememberServer")
 $cbAutoUpdate   = $window.FindName("cbAutoUpdate")
+$btnCheckUpdate = $window.FindName("btnCheckUpdate")
 $cbConfirmCopy  = $window.FindName("cbConfirmCopy")
 $cmbTheme       = $window.FindName("cmbTheme")
 $cmbLanguage    = $window.FindName("cmbLanguage")
@@ -1355,6 +1389,14 @@ $cbClipboardAutoClear.Add_Checked({ Save-Prefs })
 $cbClipboardAutoClear.Add_Unchecked({ Save-Prefs })
 $cbAutoUpdate.Add_Checked({ Save-Prefs })
 $cbAutoUpdate.Add_Unchecked({ Save-Prefs })
+$btnCheckUpdate.Add_Click({
+  $info = Check-ForUpdates -CurrentVersion $CurrentVersion
+  if ($info) {
+    Show-UpdatePrompt $info
+  } else {
+    [System.Windows.MessageBox]::Show($t.msgNoUpdate,'Update','OK','Information') | Out-Null
+  }
+})
 $cbConfirmCopy.Add_Checked({ Save-Prefs })
 $cbConfirmCopy.Add_Unchecked({ Save-Prefs })
 $cmbTheme.Add_SelectionChanged({ Apply-Theme $cmbTheme.SelectedItem.Tag; Save-Prefs })
@@ -1524,11 +1566,7 @@ if ($cbAutoUpdate.IsChecked) {
   $updateInfo = Check-ForUpdates -CurrentVersion $CurrentVersion
 }
 if ($updateInfo) {
-  $btnUpdate.Content = "Update to v$($updateInfo.Version)"
-  $btnUpdate.Visibility = 'Visible'
-  $btnIgnore.Visibility = 'Visible'
-  $btnUpdate.Add_Click({ Start-AppUpdate -Info $updateInfo -Window $window })
-  $btnIgnore.Add_Click({ $script:Prefs.IgnoreVersion = $updateInfo.Version; Save-Prefs; $btnUpdate.Visibility='Collapsed'; $btnIgnore.Visibility='Collapsed' })
+  Show-UpdatePrompt $updateInfo
 }
 
 $btnGet.Add_Click({
