@@ -10,8 +10,7 @@
 
 ## Provided
 
-- **PowerShell script (.ps1)**: available **in the repository** (`LAPS-UI.ps1`).
-- **PowerShell module (.psm1)**: `scripts/LAPS.Intune.psm1` provides the Microsoft Graph helpers leveraged by the Intune tab.
+- **PowerShell script (.ps1)**: available **in the repository** (`LAPS-UI.ps1`). The Intune helpers are embedded directly in the script.
 - **Windows binary (.exe)**: available **in the _Releases_ tab** of this repository.
 
 > The `.exe` binary provided in the releases **is not signed** (no code-signing).
@@ -54,7 +53,7 @@
 ## Installation & Launch
 
 ### Option A — PowerShell script (recommended if SmartScreen/EDR is strict)
-1. Get `LAPS-UI.ps1` from the repository and keep `LAPS.Intune.psm1` in the same folder.
+1. Get `LAPS-UI.ps1` from the repository.
 2. (Optional) Unblock the file if needed:
  ```powershell
  Unblock-File .\LAPS-UI.ps1
