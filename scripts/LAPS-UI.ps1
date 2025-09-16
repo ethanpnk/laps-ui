@@ -26,11 +26,50 @@ function Ensure-LapsGraphModule {
   [CmdletBinding()]
   param()
 
-  if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
-    throw [System.Exception]::new('GraphModuleMissing')
+  $moduleName = 'Microsoft.Graph.Authentication'
+  if (-not (Get-Module -ListAvailable -Name $moduleName)) {
+    $installCmd = Get-Command -Name Install-Module -ErrorAction SilentlyContinue
+    if (-not $installCmd) {
+      throw [System.Exception]::new('GraphModuleMissing')
+    }
+
+    $originalProtocol = [Net.ServicePointManager]::SecurityProtocol
+    if (($originalProtocol -band [Net.SecurityProtocolType]::Tls12) -eq 0) {
+      [Net.ServicePointManager]::SecurityProtocol = $originalProtocol -bor [Net.SecurityProtocolType]::Tls12
+    }
+
+    try {
+      $nuget = Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue
+      if (-not $nuget) {
+        Install-PackageProvider -Name NuGet -Scope CurrentUser -Force -ErrorAction Stop | Out-Null
+      }
+
+      $installParams = @{
+        Name             = $moduleName
+        Scope            = 'CurrentUser'
+        Repository       = 'PSGallery'
+        AllowClobber     = $true
+        Force            = $true
+        TrustRepository  = $true
+        ErrorAction      = 'Stop'
+      }
+      if (-not ($installCmd.Parameters.ContainsKey('TrustRepository'))) {
+        $installParams.Remove('TrustRepository')
+      }
+      Install-Module @installParams
+    } catch {
+      throw (New-Object System.Exception('GraphModuleInstallFailed', $_.Exception))
+    } finally {
+      [Net.ServicePointManager]::SecurityProtocol = $originalProtocol
+    }
   }
 
-  Import-Module Microsoft.Graph.Authentication -ErrorAction Stop | Out-Null
+  try {
+    Import-Module $moduleName -ErrorAction Stop | Out-Null
+  } catch {
+    throw (New-Object System.Exception('GraphModuleInstallFailed', $_.Exception))
+  }
+
   try {
     Import-Module Microsoft.Graph.DeviceManagement -ErrorAction SilentlyContinue | Out-Null
   } catch {
@@ -52,6 +91,44 @@ function Connect-IntuneGraph {
     throw "Unable to obtain Microsoft Graph context."
   }
   return $ctx
+}
+
+function Resolve-GraphErrorMessage {
+  param(
+    [Parameter(Mandatory)]
+    [object]$ErrorRecord
+  )
+
+  $exception = $ErrorRecord
+  if ($ErrorRecord -is [System.Management.Automation.ErrorRecord]) {
+    $exception = $ErrorRecord.Exception
+  }
+
+  if (-not ($exception -is [System.Exception])) {
+    return [string]$ErrorRecord
+  }
+
+  $t = if ($script:t) { $script:t } else { @{} }
+  $message = $exception.Message
+  switch ($message) {
+    'GraphModuleMissing'        {
+      if ($t.ContainsKey('msgAzureInstallModule')) { return $t.msgAzureInstallModule }
+      return 'Microsoft.Graph PowerShell module is required.'
+    }
+    'GraphModuleInstallFailed' {
+      $detail = $exception.InnerException
+      while ($detail -and $detail.InnerException) { $detail = $detail.InnerException }
+      if ($detail -and -not [string]::IsNullOrWhiteSpace($detail.Message)) {
+        if ($t.ContainsKey('msgAzureInstallFailed')) {
+          return "$($t.msgAzureInstallFailed)`n$($detail.Message)"
+        }
+        return "Automatic installation of Microsoft.Graph PowerShell module failed.`n$($detail.Message)"
+      }
+      if ($t.ContainsKey('msgAzureInstallFailed')) { return $t.msgAzureInstallFailed }
+      return 'Automatic installation of Microsoft.Graph PowerShell module failed.'
+    }
+    default { return $message }
+  }
 }
 
 function Disconnect-IntuneGraph {
@@ -560,6 +637,7 @@ function Update-ExpirationIndicator {
 function Update-AzureStatusLabel {
   if (-not $lblAzureStatus -or -not $script:t) { return }
   $connected = ($script:AzureState -and $script:AzureState.IsConnected)
+  $connecting = ($script:AzureState -and $script:AzureState.IsConnecting)
   if ($connected) {
     $acct = $script:AzureState.Account
     if ([string]::IsNullOrWhiteSpace($acct)) { $acct = '' }
@@ -567,6 +645,12 @@ function Update-AzureStatusLabel {
     if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Collapsed' }
     if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Visible'; $btnAzureSignOut.IsEnabled = $true }
     if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $true }
+  } elseif ($connecting) {
+    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible' }
+    if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Collapsed' }
+    $connectingText = if ($script:t -and $script:t.ContainsKey('lblAzureStatusConnecting')) { $script:t.lblAzureStatusConnecting } else { 'Signing in…' }
+    $lblAzureStatus.Text = $connectingText
+    if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $false }
   } else {
     $lblAzureStatus.Text = $script:t.lblAzureStatusSignedOut
     if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible'; $btnAzureSignIn.IsEnabled = -not ($script:AzureState -and $script:AzureState.IsConnecting) }
@@ -1400,11 +1484,13 @@ $translations = @{
     langArabic      = 'Arabic'
     btnHistory_ToolTip = 'History'
     lblAzureStatusSignedOut = 'Not signed in'
+    lblAzureStatusConnecting = 'Signing in…'
     lblAzureStatusSignedIn  = 'Connected as {0}'
     msgAzureConnectFirst = 'Please sign in to Microsoft Graph first.'
     msgAzureNoDevices = 'No Intune devices matched your query.'
     msgAzureMultipleDevices = 'Select a device to retrieve the password.'
-    msgAzureInstallModule = 'Microsoft.Graph PowerShell module is required.'
+    msgAzureInstallModule = 'Microsoft.Graph PowerShell module is required. Install it with Install-Module Microsoft.Graph.'
+    msgAzureInstallFailed = 'Automatic installation of the Microsoft.Graph PowerShell module failed. Please install it manually (Install-Module Microsoft.Graph -Scope CurrentUser).'
   }
   French = @{
     tabMain         = 'LAPS (AD)'
@@ -1457,11 +1543,13 @@ $translations = @{
     langArabic      = 'Arabe'
     btnHistory_ToolTip = 'Historique'
     lblAzureStatusSignedOut = 'Non connecté'
+    lblAzureStatusConnecting = 'Connexion en cours…'
     lblAzureStatusSignedIn  = 'Connecté en tant que {0}'
     msgAzureConnectFirst = "Veuillez d'abord vous connecter à Microsoft Graph."
     msgAzureNoDevices = 'Aucun appareil Intune ne correspond à votre requête.'
     msgAzureMultipleDevices = 'Sélectionnez un appareil pour récupérer le mot de passe.'
-    msgAzureInstallModule = 'Le module PowerShell Microsoft.Graph est requis.'
+    msgAzureInstallModule = 'Le module PowerShell Microsoft.Graph est requis. Installez-le avec Install-Module Microsoft.Graph.'
+    msgAzureInstallFailed = "L’installation automatique du module PowerShell Microsoft.Graph a échoué. Veuillez l’installer manuellement (Install-Module Microsoft.Graph -Scope CurrentUser)."
   }
   Spanish = @{
     tabMain         = 'LAPS (AD)'
@@ -1514,11 +1602,13 @@ $translations = @{
     langArabic      = 'Árabe'
     btnHistory_ToolTip = 'Historial'
     lblAzureStatusSignedOut = 'No conectado'
+    lblAzureStatusConnecting = 'Conectando…'
     lblAzureStatusSignedIn  = 'Conectado como {0}'
     msgAzureConnectFirst = 'Inicie sesión en Microsoft Graph primero.'
     msgAzureNoDevices = 'Ningún dispositivo de Intune coincide con la búsqueda.'
     msgAzureMultipleDevices = 'Seleccione un dispositivo para obtener la contraseña.'
-    msgAzureInstallModule = 'Se requiere el módulo de PowerShell Microsoft.Graph.'
+    msgAzureInstallModule = 'Se requiere el módulo de PowerShell Microsoft.Graph. Instálelo con Install-Module Microsoft.Graph.'
+    msgAzureInstallFailed = 'La instalación automática del módulo de PowerShell Microsoft.Graph falló. Instálelo manualmente (Install-Module Microsoft.Graph -Scope CurrentUser).'
   }
   Italian = @{
     tabMain         = 'LAPS (AD)'
@@ -1571,11 +1661,13 @@ $translations = @{
     langArabic      = 'Arabo'
     btnHistory_ToolTip = 'Cronologia'
     lblAzureStatusSignedOut = 'Non connesso'
+    lblAzureStatusConnecting = 'Connessione in corso…'
     lblAzureStatusSignedIn  = 'Connesso come {0}'
     msgAzureConnectFirst = 'Accedere prima a Microsoft Graph.'
     msgAzureNoDevices = 'Nessun dispositivo Intune corrisponde alla ricerca.'
     msgAzureMultipleDevices = 'Seleziona un dispositivo per recuperare la password.'
-    msgAzureInstallModule = 'È necessario il modulo Microsoft.Graph per PowerShell.'
+    msgAzureInstallModule = 'È necessario il modulo Microsoft.Graph per PowerShell. Installalo con Install-Module Microsoft.Graph.'
+    msgAzureInstallFailed = 'Installazione automatica del modulo Microsoft.Graph per PowerShell non riuscita. Installalo manualmente (Install-Module Microsoft.Graph -Scope CurrentUser).'
   }
   German = @{
     tabMain         = 'LAPS (AD)'
@@ -1628,11 +1720,13 @@ $translations = @{
     langArabic      = 'Arabisch'
     btnHistory_ToolTip = 'Verlauf'
     lblAzureStatusSignedOut = 'Nicht angemeldet'
+    lblAzureStatusConnecting = 'Anmeldung läuft…'
     lblAzureStatusSignedIn  = 'Als {0} verbunden'
     msgAzureConnectFirst = 'Bitte melden Sie sich zuerst bei Microsoft Graph an.'
     msgAzureNoDevices = 'Keine Intune-Geräte entsprechen Ihrer Suche.'
     msgAzureMultipleDevices = 'Wählen Sie ein Gerät aus, um das Kennwort abzurufen.'
-    msgAzureInstallModule = 'Das Microsoft.Graph PowerShell-Modul ist erforderlich.'
+    msgAzureInstallModule = 'Das Microsoft.Graph PowerShell-Modul ist erforderlich. Installieren Sie es mit Install-Module Microsoft.Graph.'
+    msgAzureInstallFailed = 'Die automatische Installation des Microsoft.Graph PowerShell-Moduls ist fehlgeschlagen. Bitte installieren Sie es manuell (Install-Module Microsoft.Graph -Scope CurrentUser).'
   }
   Portuguese = @{
     tabMain         = 'LAPS (AD)'
@@ -1685,11 +1779,13 @@ $translations = @{
     langArabic      = 'Árabe'
     btnHistory_ToolTip = 'Histórico'
     lblAzureStatusSignedOut = 'Não conectado'
+    lblAzureStatusConnecting = 'Conectando…'
     lblAzureStatusSignedIn  = 'Conectado como {0}'
     msgAzureConnectFirst = 'Conecte-se primeiro ao Microsoft Graph.'
     msgAzureNoDevices = 'Nenhum dispositivo do Intune corresponde à sua consulta.'
     msgAzureMultipleDevices = 'Selecione um dispositivo para obter a senha.'
-    msgAzureInstallModule = 'É necessário o módulo Microsoft.Graph PowerShell.'
+    msgAzureInstallModule = 'É necessário o módulo Microsoft.Graph PowerShell. Instale-o com Install-Module Microsoft.Graph.'
+    msgAzureInstallFailed = 'Falha na instalação automática do módulo Microsoft.Graph PowerShell. Instale-o manualmente (Install-Module Microsoft.Graph -Scope CurrentUser).'
   }
   Chinese = @{
     tabMain         = 'LAPS (AD)'
@@ -1742,11 +1838,13 @@ $translations = @{
     langArabic      = '阿拉伯语'
     btnHistory_ToolTip = '历史'
     lblAzureStatusSignedOut = '未登录'
+    lblAzureStatusConnecting = '正在登录…'
     lblAzureStatusSignedIn  = '已连接为 {0}'
     msgAzureConnectFirst = '请先登录 Microsoft Graph。'
     msgAzureNoDevices = '没有匹配的 Intune 设备。'
     msgAzureMultipleDevices = '选择一个设备以检索密码。'
-    msgAzureInstallModule = '需要 Microsoft.Graph PowerShell 模块。'
+    msgAzureInstallModule = '需要 Microsoft.Graph PowerShell 模块。请使用 Install-Module Microsoft.Graph 安装。'
+    msgAzureInstallFailed = 'Microsoft.Graph PowerShell 模块自动安装失败。请手动安装 (Install-Module Microsoft.Graph -Scope CurrentUser)。'
   }
   Arabic = @{
     tabMain         = 'LAPS (AD)'
@@ -1799,11 +1897,13 @@ $translations = @{
     langArabic      = 'العربية'
     btnHistory_ToolTip = 'السجل'
     lblAzureStatusSignedOut = 'غير مسجل الدخول'
+    lblAzureStatusConnecting = 'جارٍ تسجيل الدخول…'
     lblAzureStatusSignedIn  = 'متصل باسم {0}'
     msgAzureConnectFirst = 'يرجى تسجيل الدخول إلى Microsoft Graph أولاً.'
     msgAzureNoDevices = 'لا توجد أجهزة Intune مطابقة لطلبك.'
     msgAzureMultipleDevices = 'حدد جهازًا لاسترجاع كلمة المرور.'
-    msgAzureInstallModule = 'مطلوب وحدة Microsoft.Graph الخاصة بـ PowerShell.'
+    msgAzureInstallModule = 'مطلوب وحدة Microsoft.Graph الخاصة بـ PowerShell. قم بتثبيتها باستخدام Install-Module Microsoft.Graph.'
+    msgAzureInstallFailed = 'فشل التثبيت التلقائي لوحدة Microsoft.Graph الخاصة بـ PowerShell. يرجى تثبيتها يدويًا (Install-Module Microsoft.Graph -Scope CurrentUser).'
   }
 }
 
@@ -2187,8 +2287,7 @@ if ($btnAzureSignIn) {
       }
       Update-AzureStatusLabel
     } catch {
-      $msg = $_.Exception.Message
-      if ($msg -eq 'GraphModuleMissing') { $msg = $script:t.msgAzureInstallModule }
+      $msg = Resolve-GraphErrorMessage $_
       [System.Windows.MessageBox]::Show("Graph sign-in failed: $msg", 'Microsoft Graph', 'OK', 'Error') | Out-Null
       if ($script:AzureState) {
         $script:AzureState.IsConnected = $false
@@ -2331,8 +2430,7 @@ if ($btnAzureSearch) {
         }
       }
     } catch {
-      $msg = $_.Exception.Message
-      if ($msg -eq 'GraphModuleMissing') { $msg = $script:t.msgAzureInstallModule }
+      $msg = Resolve-GraphErrorMessage $_
       [System.Windows.MessageBox]::Show("Graph query failed: $msg", 'Microsoft Graph', 'OK', 'Error') | Out-Null
     } finally {
       $window.Cursor = 'Arrow'
@@ -2376,7 +2474,9 @@ function Show-AzureDeviceDetails {
       $txtAzureDetails.Text += "`nNo LAPS password available."
     }
   } catch {
-    $txtAzureDetails.Text += "`nError: $($_.Exception.Message)"
+    $msg = Resolve-GraphErrorMessage $_
+    $txtAzureDetails.Text += "`nError: $msg"
+    [System.Windows.MessageBox]::Show("Graph query failed: $msg", 'Microsoft Graph', 'OK', 'Error') | Out-Null
   }
 }
 

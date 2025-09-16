@@ -46,7 +46,7 @@
 - **.NET Framework 4.7+**
 - Network access to a **domain controller** (LDAP 389 / LDAPS 636)
 - **LAPS read rights** on the targeted **Computer** objects (ACL/GPO Microsoft LAPS)
-- *(Optional)* **Microsoft Graph PowerShell SDK** (`Install-Module Microsoft.Graph`) for the Intune / Azure AD mode.
+- *(Optional)* Internet access to download the **Microsoft Graph PowerShell SDK**. The script attempts to install `Microsoft.Graph.Authentication` automatically (CurrentUser scope). Offline workstations must have the SDK pre-installed (`Install-Module Microsoft.Graph`).
 
 ---
 
@@ -85,7 +85,7 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 6. Click **Copy** to place the password on the clipboard. The 20 s countdown automatically purges it (if unchanged).
 
 ### LAPS (Intune) tab
-1. Install the Microsoft Graph PowerShell SDK (`Install-Module Microsoft.Graph`) on the workstation if it is not already available.
+1. On first use the script downloads the Microsoft Graph PowerShell SDK (CurrentUser scope). If the workstation cannot reach the PowerShell Gallery, install it manually beforehand: `Install-Module Microsoft.Graph`.
 2. Click **Sign in**. A browser window opens for Azure AD/Entra ID authentication (SSO, MFA, conditional access, and federated IdPs are supported). Tokens stay in-memory for the current session.
 3. Enter the Intune device name and click **Retrieve**. If multiple devices match, select one in the results list.
 4. The password and expiration are retrieved from the Graph endpoint `deviceManagement/managedDevices/{id}/windowsLapsManagedDeviceInformation`. History, clipboard clearing, and the visibility toggle behave just like the AD tab, but are stored independently.
@@ -98,7 +98,7 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 - Admin consent for the **Microsoft Graph delegated permission** `DeviceManagementManagedDevices.Read.All` (prompted automatically when the first administrator runs the Intune tab).
 
 ### One-time setup
-1. Install the **Microsoft Graph PowerShell SDK** on the admin workstation:
+1. Allow the script to download the **Microsoft Graph PowerShell SDK** when first signing in, or pre-install it on the admin workstation:
    ```powershell
    Install-Module Microsoft.Graph
    ```
