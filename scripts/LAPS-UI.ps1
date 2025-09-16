@@ -22,6 +22,13 @@ Add-Type -AssemblyName System.DirectoryServices
 Add-Type -AssemblyName System.DirectoryServices.AccountManagement
 Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null
 
+$scriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$intuneModulePath = Join-Path $scriptRoot 'LAPS.Intune.psm1'
+if (-not (Test-Path -LiteralPath $intuneModulePath)) {
+  throw "Required module 'LAPS.Intune.psm1' was not found next to LAPS-UI.ps1."
+}
+Import-Module -Name $intuneModulePath -Force -ErrorAction Stop
+
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -206,6 +213,261 @@ function Get-LapsPasswordFromEntry { param($Result)
     return [pscustomobject]@{ Type='Legacy LAPS'; Password=[string]$legacyPwd; Account=$null; Expires=$exp; DN=[string]$dn } }
 
   $null }
+
+# ---------- UI state helpers ----------
+$bc = New-Object Windows.Media.BrushConverter
+$BrushDigits   = $bc.ConvertFromString("#81D4FA")   # light blue
+$BrushLetters  = $bc.ConvertFromString("#C5E1A5")   # light green
+$BrushSymbols  = $bc.ConvertFromString("#FFB74D")   # orange
+$BrushDefault  = $bc.ConvertFromString("#EEEEEE")
+
+function New-LapsUiState {
+  param(
+    [string]$Name,
+    [System.Windows.Controls.PasswordBox]$PasswordBox,
+    [System.Windows.Controls.RichTextBox]$RichTextBox,
+    [System.Windows.Controls.CheckBox]$ShowCheckBox,
+    [System.Windows.Controls.Button]$CopyButton,
+    [System.Windows.Controls.TextBlock]$CountdownLabel,
+    [System.Windows.Controls.StackPanel]$ExpirePanel,
+    [System.Windows.Shapes.Ellipse]$ExpireEllipse,
+    [System.Windows.Controls.TextBlock]$ExpireLabel)
+
+  $state = [pscustomobject]@{
+    Name               = $Name
+    CurrentPassword    = ""
+    ClipboardSnapshot  = ""
+    PasswordBox        = $PasswordBox
+    RichTextBox        = $RichTextBox
+    ShowCheckBox       = $ShowCheckBox
+    CopyButton         = $CopyButton
+    CountdownLabel     = $CountdownLabel
+    CountdownRemaining = 0
+    Timer              = New-Object System.Windows.Threading.DispatcherTimer
+    DoneTimer          = $null
+    ExpirePanel        = $ExpirePanel
+    ExpireEllipse      = $ExpireEllipse
+    ExpireLabel        = $ExpireLabel
+  }
+  $state.Timer.Interval = [TimeSpan]::FromSeconds(1)
+  $state.Timer.Tag = $state
+  $state.Timer.Add_Tick({
+    param($sender,$eventArgs)
+    $st = $sender.Tag
+    if (-not $st) { return }
+    if ($st.CountdownRemaining -gt 0) {
+      $st.CountdownRemaining--
+      if ($st.CountdownLabel) {
+        $st.CountdownLabel.Text = "Clipboard cleared in $($st.CountdownRemaining)s"
+      }
+      if ($st.CountdownRemaining -le 0) {
+        try {
+          if ([System.Windows.Clipboard]::ContainsText()) {
+            $txt = [System.Windows.Clipboard]::GetText()
+            if ($txt -and $txt -eq $st.ClipboardSnapshot) {
+              [System.Windows.Clipboard]::Clear()
+            }
+          }
+        } catch {}
+        $sender.Stop()
+        if ($st.CountdownLabel) {
+          $st.CountdownLabel.Text = 'Clipboard cleared'
+          $st.CountdownLabel.Foreground = 'LimeGreen'
+        }
+        if ($st.DoneTimer) { $st.DoneTimer.Stop(); $st.DoneTimer = $null }
+        $st.DoneTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $st.DoneTimer.Interval = [TimeSpan]::FromSeconds(2)
+        $st.DoneTimer.Tag = $st
+        $st.DoneTimer.Add_Tick({
+          param($s,$e)
+          $stateRef = $s.Tag
+          $s.Stop()
+          if ($stateRef -and $stateRef.CountdownLabel) {
+            $stateRef.CountdownLabel.Visibility = 'Collapsed'
+            $stateRef.CountdownLabel.Foreground = '#FFA07A'
+          }
+          if ($stateRef) {
+            $stateRef.DoneTimer = $null
+          }
+        })
+        $st.DoneTimer.Start()
+      }
+    } else {
+      $sender.Stop()
+      if ($st.CountdownLabel) {
+        $st.CountdownLabel.Visibility = 'Collapsed'
+      }
+    }
+  })
+  $state
+}
+
+function Update-LapsPasswordDisplay {
+  param([pscustomobject]$State,[string]$Password)
+  if (-not $State -or -not $State.RichTextBox) { return }
+  $pwd = if ($Password) { [string]$Password } else { "" }
+  $doc = New-Object System.Windows.Documents.FlowDocument
+  $doc.PagePadding = [Windows.Thickness]::new(0)
+  $p = New-Object System.Windows.Documents.Paragraph
+  $p.Margin = [Windows.Thickness]::new(0)
+  $p.LineHeight = 28
+  if ($pwd.Length -gt 0) {
+    foreach ($ch in $pwd.ToCharArray()) {
+      $run = New-Object System.Windows.Documents.Run ($ch)
+      switch -regex ($ch) {
+        '^[0-9]$'        { $run.Foreground = $BrushDigits;  break }
+        '^[A-Za-z]$'     { $run.Foreground = $BrushLetters; break }
+        default          { $run.Foreground = $BrushSymbols; break }
+      }
+      $p.Inlines.Add($run) | Out-Null
+    }
+  }
+  $doc.Blocks.Clear()
+  if ($pwd.Length -gt 0) {
+    $doc.Blocks.Add($p) | Out-Null
+  }
+  $State.RichTextBox.Document = $doc
+}
+
+function Refresh-LapsDisplay {
+  param([pscustomobject]$State)
+  if (-not $State) { return }
+  $pwd = if ($State.CurrentPassword) { $State.CurrentPassword } else { "" }
+  if ($State.PasswordBox) { $State.PasswordBox.Password = $pwd }
+  if ($State.ShowCheckBox -and $State.ShowCheckBox.IsChecked) {
+    Update-LapsPasswordDisplay $State $pwd
+    if ($State.RichTextBox) { $State.RichTextBox.Visibility = 'Visible' }
+    if ($State.PasswordBox) { $State.PasswordBox.Visibility = 'Collapsed' }
+  } else {
+    if ($State.PasswordBox) { $State.PasswordBox.Visibility = 'Visible' }
+    if ($State.RichTextBox) { $State.RichTextBox.Visibility = 'Collapsed' }
+  }
+}
+
+function Stop-LapsCountdown {
+  param([pscustomobject]$State)
+  if (-not $State) { return }
+  if ($State.Timer) { $State.Timer.Stop() }
+  if ($State.DoneTimer) { $State.DoneTimer.Stop(); $State.DoneTimer = $null }
+  $State.CountdownRemaining = 0
+  $State.ClipboardSnapshot = ""
+  if ($State.CountdownLabel) {
+    $State.CountdownLabel.Visibility = 'Collapsed'
+    $State.CountdownLabel.Foreground = '#FFA07A'
+    $State.CountdownLabel.Text = ""
+  }
+}
+
+function Set-LapsPassword {
+  param([pscustomobject]$State,[string]$Password)
+  if (-not $State) { return }
+  $State.CurrentPassword = if ($Password) { [string]$Password } else { "" }
+  Refresh-LapsDisplay $State
+  if ($State.CopyButton) {
+    $State.CopyButton.IsEnabled = -not [string]::IsNullOrWhiteSpace($State.CurrentPassword)
+  }
+}
+
+function Clear-LapsPassword {
+  param([pscustomobject]$State)
+  if (-not $State) { return }
+  $State.CurrentPassword = ""
+  if ($State.PasswordBox) { $State.PasswordBox.Password = "" }
+  if ($State.RichTextBox) { $State.RichTextBox.Document.Blocks.Clear() }
+  Refresh-LapsDisplay $State
+  if ($State.CopyButton) { $State.CopyButton.IsEnabled = $false }
+  Stop-LapsCountdown $State
+}
+
+function Copy-LapsPassword {
+  param([pscustomobject]$State)
+  if (-not $State) { return }
+  $pwd = $State.CurrentPassword
+  if ([string]::IsNullOrWhiteSpace($pwd)) { return }
+  if ($cbConfirmCopy.IsChecked) {
+    $res = [System.Windows.MessageBox]::Show("Copy password to clipboard?","Confirm",'YesNo','Question')
+    if ($res -ne 'Yes') { return }
+  }
+  $usedWinRT = $false
+  try {
+    $winRtSupported = [Windows.Foundation.Metadata.ApiInformation]::IsMethodPresent(
+      "Windows.ApplicationModel.DataTransfer.Clipboard", "SetContentWithOptions")
+    if ($winRtSupported) {
+      $dp = New-Object Windows.ApplicationModel.DataTransfer.DataPackage
+      $dp.RequestedOperation = [Windows.ApplicationModel.DataTransfer.DataPackageOperation]::Copy
+      $dp.SetText($pwd)
+      $opt = New-Object Windows.ApplicationModel.DataTransfer.ClipboardContentOptions
+      $opt.IsAllowedInHistory = $false; $opt.IsRoamingEnabled = $false
+      [Windows.ApplicationModel.DataTransfer.Clipboard]::SetContentWithOptions($dp,$opt)
+      [Windows.ApplicationModel.DataTransfer.Clipboard]::Flush()
+      $usedWinRT = $true
+    }
+  } catch {}
+  if (-not $usedWinRT) { [System.Windows.Clipboard]::SetText($pwd) }
+
+  [System.Windows.MessageBox]::Show(("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
+    "Copied",'OK','Information') | Out-Null
+
+  if ($cbClipboardAutoClear.IsChecked) {
+    Stop-LapsCountdown $State
+    $State.ClipboardSnapshot = $pwd
+    $State.CountdownRemaining = $script:ClipboardAutoClearSeconds
+    if ($State.CountdownLabel) {
+      $State.CountdownLabel.Text = "Clipboard cleared in $($State.CountdownRemaining)s"
+      $State.CountdownLabel.Foreground = '#FFA07A'
+      $State.CountdownLabel.Visibility = 'Visible'
+    }
+    if ($State.Timer) { $State.Timer.Stop(); $State.Timer.Start() }
+  } else {
+    Stop-LapsCountdown $State
+  }
+}
+
+function Update-ExpirationIndicator {
+  param([pscustomobject]$State,[nullable[DateTime]]$Expiration)
+  if (-not $State -or -not $State.ExpirePanel) { return }
+  if ($null -eq $Expiration) {
+    $State.ExpirePanel.Visibility = 'Collapsed'
+    if ($State.ExpireLabel) { $State.ExpireLabel.Text = '' }
+    return
+  }
+  $now = Get-Date
+  $State.ExpirePanel.Visibility = 'Visible'
+  if ($Expiration -lt $now) {
+    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'Red' }
+    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expired on $Expiration" }
+  } elseif (($Expiration - $now).TotalDays -le 2) {
+    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'Orange' }
+    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expires soon ($Expiration)" }
+  } else {
+    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'LimeGreen' }
+    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expires on $Expiration" }
+  }
+}
+
+function Update-AzureStatusLabel {
+  if (-not $lblAzureStatus -or -not $script:t) { return }
+  $connected = ($script:AzureState -and $script:AzureState.IsConnected)
+  if ($connected) {
+    $acct = $script:AzureState.Account
+    if ([string]::IsNullOrWhiteSpace($acct)) { $acct = '' }
+    $lblAzureStatus.Text = $script:t.lblAzureStatusSignedIn -f $acct
+    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Collapsed' }
+    if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Visible'; $btnAzureSignOut.IsEnabled = $true }
+    if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $true }
+  } else {
+    $lblAzureStatus.Text = $script:t.lblAzureStatusSignedOut
+    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible'; $btnAzureSignIn.IsEnabled = -not ($script:AzureState -and $script:AzureState.IsConnecting) }
+    if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Collapsed' }
+    if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $false }
+  }
+  if ($btnAzureSignIn -and $script:AzureState -and $script:AzureState.IsConnecting) {
+    $btnAzureSignIn.IsEnabled = $false
+  }
+  if ($btnAzureSearch -and $script:AzureState -and $script:AzureState.IsConnecting) {
+    $btnAzureSearch.IsEnabled = $false
+  }
+}
 
 # ---------- Update helpers ----------
 function Get-LatestReleaseInfo {
@@ -1761,238 +2023,6 @@ $btnHistory.Add_Click({
     }
 })
 
-# ---------- NEW: colorized clear-text rendering ----------
-# Pre-create brushes
-$bc = New-Object Windows.Media.BrushConverter
-$BrushDigits   = $bc.ConvertFromString("#81D4FA")   # light blue
-$BrushLetters  = $bc.ConvertFromString("#C5E1A5")   # light green
-$BrushSymbols  = $bc.ConvertFromString("#FFB74D")   # orange
-$BrushDefault  = $bc.ConvertFromString("#EEEEEE")
-
-function New-LapsUiState {
-  param(
-    [string]$Name,
-    [System.Windows.Controls.PasswordBox]$PasswordBox,
-    [System.Windows.Controls.RichTextBox]$RichTextBox,
-    [System.Windows.Controls.CheckBox]$ShowCheckBox,
-    [System.Windows.Controls.Button]$CopyButton,
-    [System.Windows.Controls.TextBlock]$CountdownLabel,
-    [System.Windows.Controls.StackPanel]$ExpirePanel,
-    [System.Windows.Shapes.Ellipse]$ExpireEllipse,
-    [System.Windows.Controls.TextBlock]$ExpireLabel)
-
-  $state = [pscustomobject]@{
-    Name               = $Name
-    CurrentPassword    = ""
-    ClipboardSnapshot  = ""
-    PasswordBox        = $PasswordBox
-    RichTextBox        = $RichTextBox
-    ShowCheckBox       = $ShowCheckBox
-    CopyButton         = $CopyButton
-    CountdownLabel     = $CountdownLabel
-    CountdownRemaining = 0
-    Timer              = New-Object System.Windows.Threading.DispatcherTimer
-    DoneTimer          = $null
-    ExpirePanel        = $ExpirePanel
-    ExpireEllipse      = $ExpireEllipse
-    ExpireLabel        = $ExpireLabel
-  }
-  $state.Timer.Interval = [TimeSpan]::FromSeconds(1)
-  $state.Timer.Tag = $state
-  $state.Timer.Add_Tick({
-    param($sender,$eventArgs)
-    $st = $sender.Tag
-    if (-not $st) { return }
-    if ($st.CountdownRemaining -gt 0) {
-      $st.CountdownRemaining--
-      if ($st.CountdownLabel) {
-        $st.CountdownLabel.Text = "Clipboard cleared in $($st.CountdownRemaining)s"
-      }
-      if ($st.CountdownRemaining -le 0) {
-        try {
-          if ([System.Windows.Clipboard]::ContainsText()) {
-            $txt = [System.Windows.Clipboard]::GetText()
-            if ($txt -and $txt -eq $st.ClipboardSnapshot) {
-              [System.Windows.Clipboard]::Clear()
-            }
-          }
-        } catch {}
-        $sender.Stop()
-        if ($st.CountdownLabel) {
-          $st.CountdownLabel.Text = 'Clipboard cleared'
-          $st.CountdownLabel.Foreground = 'LimeGreen'
-        }
-        if ($st.DoneTimer) { $st.DoneTimer.Stop(); $st.DoneTimer = $null }
-        $st.DoneTimer = New-Object System.Windows.Threading.DispatcherTimer
-        $st.DoneTimer.Interval = [TimeSpan]::FromSeconds(2)
-        $st.DoneTimer.Tag = $st
-        $st.DoneTimer.Add_Tick({
-          param($s,$e)
-          $stateRef = $s.Tag
-          $s.Stop()
-          if ($stateRef -and $stateRef.CountdownLabel) {
-            $stateRef.CountdownLabel.Visibility = 'Collapsed'
-            $stateRef.CountdownLabel.Foreground = '#FFA07A'
-          }
-          if ($stateRef) {
-            $stateRef.DoneTimer = $null
-          }
-        })
-        $st.DoneTimer.Start()
-      }
-    } else {
-      $sender.Stop()
-      if ($st.CountdownLabel) {
-        $st.CountdownLabel.Visibility = 'Collapsed'
-      }
-    }
-  })
-  $state
-}
-
-function Update-LapsPasswordDisplay {
-  param([pscustomobject]$State,[string]$Password)
-  if (-not $State -or -not $State.RichTextBox) { return }
-  $pwd = if ($Password) { [string]$Password } else { "" }
-  $doc = New-Object System.Windows.Documents.FlowDocument
-  $doc.PagePadding = [Windows.Thickness]::new(0)
-  $p = New-Object System.Windows.Documents.Paragraph
-  $p.Margin = [Windows.Thickness]::new(0)
-  $p.LineHeight = 28
-  if ($pwd.Length -gt 0) {
-    foreach ($ch in $pwd.ToCharArray()) {
-      $run = New-Object System.Windows.Documents.Run ($ch)
-      switch -regex ($ch) {
-        '^[0-9]$'        { $run.Foreground = $BrushDigits;  break }
-        '^[A-Za-z]$'     { $run.Foreground = $BrushLetters; break }
-        default          { $run.Foreground = $BrushSymbols; break }
-      }
-      $p.Inlines.Add($run) | Out-Null
-    }
-  }
-  $doc.Blocks.Clear()
-  if ($pwd.Length -gt 0) {
-    $doc.Blocks.Add($p) | Out-Null
-  }
-  $State.RichTextBox.Document = $doc
-}
-
-function Refresh-LapsDisplay {
-  param([pscustomobject]$State)
-  if (-not $State) { return }
-  $pwd = if ($State.CurrentPassword) { $State.CurrentPassword } else { "" }
-  if ($State.PasswordBox) { $State.PasswordBox.Password = $pwd }
-  if ($State.ShowCheckBox -and $State.ShowCheckBox.IsChecked) {
-    Update-LapsPasswordDisplay $State $pwd
-    if ($State.RichTextBox) { $State.RichTextBox.Visibility = 'Visible' }
-    if ($State.PasswordBox) { $State.PasswordBox.Visibility = 'Collapsed' }
-  } else {
-    if ($State.PasswordBox) { $State.PasswordBox.Visibility = 'Visible' }
-    if ($State.RichTextBox) { $State.RichTextBox.Visibility = 'Collapsed' }
-  }
-}
-
-function Set-LapsPassword {
-  param([pscustomobject]$State,[string]$Password)
-  if (-not $State) { return }
-  $State.CurrentPassword = if ($Password) { [string]$Password } else { "" }
-  Refresh-LapsDisplay $State
-  if ($State.CopyButton) {
-    $State.CopyButton.IsEnabled = -not [string]::IsNullOrWhiteSpace($State.CurrentPassword)
-  }
-}
-
-function Clear-LapsPassword {
-  param([pscustomobject]$State)
-  if (-not $State) { return }
-  $State.CurrentPassword = ""
-  if ($State.PasswordBox) { $State.PasswordBox.Password = "" }
-  if ($State.RichTextBox) { $State.RichTextBox.Document.Blocks.Clear() }
-  Refresh-LapsDisplay $State
-  if ($State.CopyButton) { $State.CopyButton.IsEnabled = $false }
-  Stop-LapsCountdown $State
-}
-
-function Stop-LapsCountdown {
-  param([pscustomobject]$State)
-  if (-not $State) { return }
-  if ($State.Timer) { $State.Timer.Stop() }
-  if ($State.DoneTimer) { $State.DoneTimer.Stop(); $State.DoneTimer = $null }
-  $State.CountdownRemaining = 0
-  $State.ClipboardSnapshot = ""
-  if ($State.CountdownLabel) {
-    $State.CountdownLabel.Visibility = 'Collapsed'
-    $State.CountdownLabel.Foreground = '#FFA07A'
-    $State.CountdownLabel.Text = ""
-  }
-}
-
-function Copy-LapsPassword {
-  param([pscustomobject]$State)
-  if (-not $State) { return }
-  $pwd = $State.CurrentPassword
-  if ([string]::IsNullOrWhiteSpace($pwd)) { return }
-  if ($cbConfirmCopy.IsChecked) {
-    $res = [System.Windows.MessageBox]::Show("Copy password to clipboard?","Confirm",'YesNo','Question')
-    if ($res -ne 'Yes') { return }
-  }
-  $usedWinRT = $false
-  try {
-    $winRtSupported = [Windows.Foundation.Metadata.ApiInformation]::IsMethodPresent(
-      "Windows.ApplicationModel.DataTransfer.Clipboard", "SetContentWithOptions")
-    if ($winRtSupported) {
-      $dp = New-Object Windows.ApplicationModel.DataTransfer.DataPackage
-      $dp.RequestedOperation = [Windows.ApplicationModel.DataTransfer.DataPackageOperation]::Copy
-      $dp.SetText($pwd)
-      $opt = New-Object Windows.ApplicationModel.DataTransfer.ClipboardContentOptions
-      $opt.IsAllowedInHistory = $false; $opt.IsRoamingEnabled = $false
-      [Windows.ApplicationModel.DataTransfer.Clipboard]::SetContentWithOptions($dp,$opt)
-      [Windows.ApplicationModel.DataTransfer.Clipboard]::Flush()
-      $usedWinRT = $true
-    }
-  } catch {}
-  if (-not $usedWinRT) { [System.Windows.Clipboard]::SetText($pwd) }
-
-  [System.Windows.MessageBox]::Show(("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
-    "Copied",'OK','Information') | Out-Null
-
-  if ($cbClipboardAutoClear.IsChecked) {
-    Stop-LapsCountdown $State
-    $State.ClipboardSnapshot = $pwd
-    $State.CountdownRemaining = $script:ClipboardAutoClearSeconds
-    if ($State.CountdownLabel) {
-      $State.CountdownLabel.Text = "Clipboard cleared in $($State.CountdownRemaining)s"
-      $State.CountdownLabel.Foreground = '#FFA07A'
-      $State.CountdownLabel.Visibility = 'Visible'
-    }
-    if ($State.Timer) { $State.Timer.Stop(); $State.Timer.Start() }
-  } else {
-    Stop-LapsCountdown $State
-  }
-}
-
-function Update-ExpirationIndicator {
-  param([pscustomobject]$State,[nullable[DateTime]]$Expiration)
-  if (-not $State -or -not $State.ExpirePanel) { return }
-  if ($null -eq $Expiration) {
-    $State.ExpirePanel.Visibility = 'Collapsed'
-    if ($State.ExpireLabel) { $State.ExpireLabel.Text = '' }
-    return
-  }
-  $now = Get-Date
-  $State.ExpirePanel.Visibility = 'Visible'
-  if ($Expiration -lt $now) {
-    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'Red' }
-    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expired on $Expiration" }
-  } elseif (($Expiration - $now).TotalDays -le 2) {
-    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'Orange' }
-    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expires soon ($Expiration)" }
-  } else {
-    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'LimeGreen' }
-    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expires on $Expiration" }
-  }
-}
-
 function Reset-FailedAuthCount {
   $script:FailedAuthCount = 0
   if ($script:LockoutTimer) {
@@ -2030,31 +2060,6 @@ if ($btnAzureCopy) {
   $btnAzureCopy.Add_Click({ param($sender,$e) Copy-LapsPassword $sender.Tag })
 }
 
-# ---------- Azure helpers ----------
-function Update-AzureStatusLabel {
-  if (-not $lblAzureStatus -or -not $script:t) { return }
-  $connected = ($script:AzureState -and $script:AzureState.IsConnected)
-  if ($connected) {
-    $acct = $script:AzureState.Account
-    if ([string]::IsNullOrWhiteSpace($acct)) { $acct = '' }
-    $lblAzureStatus.Text = $script:t.lblAzureStatusSignedIn -f $acct
-    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Collapsed' }
-    if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Visible'; $btnAzureSignOut.IsEnabled = $true }
-    if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $true }
-  } else {
-    $lblAzureStatus.Text = $script:t.lblAzureStatusSignedOut
-    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible'; $btnAzureSignIn.IsEnabled = -not ($script:AzureState -and $script:AzureState.IsConnecting) }
-    if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Collapsed' }
-    if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $false }
-  }
-  if ($btnAzureSignIn -and $script:AzureState -and $script:AzureState.IsConnecting) {
-    $btnAzureSignIn.IsEnabled = $false
-  }
-  if ($btnAzureSearch -and $script:AzureState -and $script:AzureState.IsConnecting) {
-    $btnAzureSearch.IsEnabled = $false
-  }
-}
-
 # Azure events
 if ($btnAzureSignIn) {
   $btnAzureSignIn.Add_Click({
@@ -2062,12 +2067,22 @@ if ($btnAzureSignIn) {
       if ($script:AzureState) { $script:AzureState.IsConnecting = $true }
       Update-AzureStatusLabel
       $window.Cursor = 'Wait'
-      Connect-IntuneGraph -Scopes @('DeviceManagementManagedDevices.Read.All') | Out-Null
+      $ctx = Connect-IntuneGraph -Scopes @('DeviceManagementManagedDevices.Read.All')
+      if ($ctx -and $script:AzureState) {
+        $script:AzureState.IsConnected = $true
+        $script:AzureState.Account = $ctx.Account
+        $script:AzureState.TenantId = $ctx.TenantId
+      }
+      Update-AzureStatusLabel
     } catch {
       $msg = $_.Exception.Message
       if ($msg -eq 'GraphModuleMissing') { $msg = $script:t.msgAzureInstallModule }
       [System.Windows.MessageBox]::Show("Graph sign-in failed: $msg", 'Microsoft Graph', 'OK', 'Error') | Out-Null
-      if ($script:AzureState) { $script:AzureState.IsConnected = $false }
+      if ($script:AzureState) {
+        $script:AzureState.IsConnected = $false
+        $script:AzureState.Account = $null
+        $script:AzureState.TenantId = $null
+      }
     } finally {
       $window.Cursor = 'Arrow'
       if ($script:AzureState) { $script:AzureState.IsConnecting = $false }
@@ -2079,6 +2094,12 @@ if ($btnAzureSignIn) {
 if ($btnAzureSignOut) {
   $btnAzureSignOut.Add_Click({
     Disconnect-IntuneGraph
+    if ($script:AzureState) {
+      $script:AzureState.IsConnected = $false
+      $script:AzureState.Account = $null
+      $script:AzureState.TenantId = $null
+    }
+    Update-AzureStatusLabel
     Clear-LapsPassword $script:AzureState
     Update-ExpirationIndicator $script:AzureState $null
     if ($txtAzureDetails) { $txtAzureDetails.Text = '' }
@@ -2216,87 +2237,6 @@ if ($lbAzureDevices) {
   })
 }
 
-function Ensure-GraphModules {
-  if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
-    throw [System.Exception]::new('GraphModuleMissing')
-  }
-  Import-Module Microsoft.Graph.Authentication -ErrorAction Stop | Out-Null
-  try { Import-Module Microsoft.Graph.DeviceManagement -ErrorAction SilentlyContinue | Out-Null } catch {}
-}
-
-function Connect-IntuneGraph {
-  param([string[]]$Scopes)
-  Ensure-GraphModules
-  Connect-MgGraph -Scopes $Scopes -ContextScope Process -NoWelcome -ErrorAction Stop | Out-Null
-  $ctx = Get-MgContext
-  if (-not $ctx) { throw "Unable to obtain Microsoft Graph context." }
-  if ($script:AzureState) {
-    $script:AzureState.IsConnected = $true
-    $script:AzureState.Account = $ctx.Account
-    $script:AzureState.TenantId = $ctx.TenantId
-  }
-  Update-AzureStatusLabel
-  $ctx
-}
-
-function Disconnect-IntuneGraph {
-  try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch {}
-  if ($script:AzureState) {
-    $script:AzureState.IsConnected = $false
-    $script:AzureState.Account = $null
-    $script:AzureState.TenantId = $null
-  }
-  Update-AzureStatusLabel
-}
-
-function Search-IntuneDevices {
-  param([string]$DeviceName)
-  Ensure-GraphModules
-  $safe = if ($DeviceName) { $DeviceName.Replace("'","''") } else { "" }
-  $filters = @()
-  if ($safe) {
-    $filters += "deviceName eq '$safe'"
-    $filters += "startsWith(deviceName,'$safe')"
-  }
-  $results = @()
-  foreach ($filter in $filters) {
-    $encodedFilter = [uri]::EscapeDataString($filter)
-    $uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices?`$filter=$encodedFilter&`$top=25"
-    try {
-      $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
-      if ($resp.value) { $results += $resp.value }
-    } catch {
-      throw $_
-    }
-  }
-  $unique = @{}
-  foreach ($dev in $results) {
-    if ($dev.id -and -not $unique.ContainsKey($dev.id)) {
-      $unique[$dev.id] = $dev
-    }
-  }
-  @($unique.Values)
-}
-
-function Get-IntuneLapsPassword {
-  param([string]$DeviceId)
-  if ([string]::IsNullOrWhiteSpace($DeviceId)) { return $null }
-  Ensure-GraphModules
-  $uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$DeviceId/windowsLapsManagedDeviceInformation"
-  $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
-  $pwd = $resp.password
-  $exp = $null
-  if ($resp.passwordExpirationDateTime) {
-    try { $exp = ([DateTime]::Parse($resp.passwordExpirationDateTime)).ToLocalTime() } catch {}
-  }
-  [pscustomobject]@{
-    Password  = $pwd
-    Expiration= $exp
-    Account   = $resp.administratorAccountName
-    Raw       = $resp
-  }
-}
-
 function Show-AzureDeviceDetails {
   param($Entry)
   if (-not $Entry -or -not $Entry.Device) { return }
@@ -2317,10 +2257,10 @@ function Show-AzureDeviceDetails {
     $laps = Get-IntuneLapsPassword -DeviceId $device.id
     if ($laps -and $laps.Password) {
       Set-LapsPassword $script:AzureState $laps.Password
-      if ($laps.Account) { $txtAzureDetails.Text += "`nAccount  : $($laps.Account)" }
-      Update-ExpirationIndicator $script:AzureState $laps.Expiration
+      if ($laps.AdministratorAccount) { $txtAzureDetails.Text += "`nAccount  : $($laps.AdministratorAccount)" }
+      Update-ExpirationIndicator $script:AzureState $laps.PasswordExpiration
     } else {
-      Update-ExpirationIndicator $script:AzureState $(if ($laps) { $laps.Expiration } else { $null })
+      Update-ExpirationIndicator $script:AzureState $(if ($laps) { $laps.PasswordExpiration } else { $null })
       $txtAzureDetails.Text += "`nNo LAPS password available."
     }
   } catch {
