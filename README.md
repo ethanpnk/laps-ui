@@ -35,7 +35,7 @@
 - **Autocomplete suggestions** for computer names with adaptive window sizing.
 - **Computer name field** disabled until a **user password** is entered.
 - **No password storage** on disk. No AD module required.
-- Optional **Intune / Azure AD** mode: authenticate with Microsoft Graph (`DeviceManagementManagedDevices.Read.All`) to retrieve Windows LAPS credentials for managed devices.
+- Optional **Intune / Azure AD** mode: authenticate with Microsoft Graph (`DeviceManagementManagedDevices.Read.All`) to retrieve Windows LAPS credentials for managed devices, with optional custom Entra app registrations (Application/Client ID + Tenant ID).
 
 ---
 
@@ -86,9 +86,10 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 
 ### LAPS (Intune) tab
 1. On first use the script downloads the Microsoft Graph PowerShell SDK (CurrentUser scope). If the workstation cannot reach the PowerShell Gallery, install it manually beforehand: `Install-Module Microsoft.Graph`.
-2. Click **Sign in**. A browser window opens for Azure AD/Entra ID authentication (SSO, MFA, conditional access, and federated IdPs are supported). Tokens stay in-memory for the current session.
-3. Enter the Intune device name and click **Retrieve**. If multiple devices match, select one in the results list.
-4. The password and expiration are retrieved from the Graph endpoint `deviceManagement/managedDevices/{id}/windowsLapsManagedDeviceInformation`. History, clipboard clearing, and the visibility toggle behave just like the AD tab, but are stored independently.
+2. *(Optional)* If you registered your own Entra application, fill the **Application (client) ID** and **Tenant ID** fields. Leave them blank to use the default **Microsoft Graph Command Line Tools** service principal. The values are stored independently from AD preferences.
+3. Click **Sign in**. A browser window opens for Azure AD/Entra ID authentication (SSO, MFA, conditional access, and federated IdPs are supported). Until sign-in completes the search box, history icon, and Retrieve button remain disabled. After success, the status banner shows the connected account and the **Sign out** button becomes available.
+4. Enter the Intune device name and click **Retrieve**. If multiple devices match, select one in the results list. The history icon becomes active once passwords have been retrieved during the current or previous sessions.
+5. The password and expiration are retrieved from the Graph endpoint `deviceManagement/managedDevices/{id}/windowsLapsManagedDeviceInformation`. History, clipboard clearing, and the visibility toggle behave just like the AD tab, but are stored independently.
 
 ## Intune / Azure AD configuration
 
@@ -104,6 +105,13 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
    ```
 2. From the LAPS (Intune) tab, sign in with an account that can grant consent to `DeviceManagementManagedDevices.Read.All`. The Microsoft Graph PowerShell application (`Microsoft Graph Command Line Tools`) will be authorised for your tenant.
 3. Verify that the Intune role assigned to helpdesk users includes the Windows LAPS permissions so they can retrieve secrets after consenting.
+
+#### Custom app registration *(optional)*
+If you prefer to control the service principal that is authorised in your tenant:
+
+1. In Azure Portal, go to **Azure Active Directory → App registrations → New registration** and create a single-tenant app.
+2. Under **API permissions**, add **Microsoft Graph → Delegated → DeviceManagementManagedDevices.Read.All**, then click **Grant admin consent**.
+3. Copy the **Application (client) ID** and **Directory (tenant) ID**, then enter them in the Intune tab fields before clicking **Sign in**. Leave the fields blank to keep using the default Microsoft Graph Command Line Tools app.
 
 ### Limitations
 - The Graph request uses the **beta** endpoint `deviceManagement/managedDevices/{id}/windowsLapsManagedDeviceInformation` (subject to future API changes).

@@ -81,11 +81,25 @@ function Connect-IntuneGraph {
   [CmdletBinding()]
   param(
     [Parameter()]
-    [string[]]$Scopes = @('DeviceManagementManagedDevices.Read.All')
+    [string[]]$Scopes = @('DeviceManagementManagedDevices.Read.All'),
+
+    [Parameter()]
+    [string]$ClientId,
+
+    [Parameter()]
+    [string]$TenantId
   )
 
   Ensure-LapsGraphModule
-  Connect-MgGraph -Scopes $Scopes -ContextScope Process -NoWelcome -ErrorAction Stop | Out-Null
+  $connectParams = @{
+    Scopes       = $Scopes
+    ContextScope = 'Process'
+    NoWelcome    = $true
+    ErrorAction  = 'Stop'
+  }
+  if (-not [string]::IsNullOrWhiteSpace($ClientId)) { $connectParams.ClientId = $ClientId }
+  if (-not [string]::IsNullOrWhiteSpace($TenantId)) { $connectParams.TenantId = $TenantId }
+  Connect-MgGraph @connectParams | Out-Null
   $ctx = Get-MgContext
   if (-not $ctx) {
     throw "Unable to obtain Microsoft Graph context."
@@ -640,28 +654,59 @@ function Update-AzureStatusLabel {
   $connecting = ($script:AzureState -and $script:AzureState.IsConnecting)
   if ($connected) {
     $acct = $script:AzureState.Account
-    if ([string]::IsNullOrWhiteSpace($acct)) { $acct = '' }
+    if ([string]::IsNullOrWhiteSpace($acct)) { $acct = 'Microsoft Graph' }
     $lblAzureStatus.Text = $script:t.lblAzureStatusSignedIn -f $acct
     if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Collapsed' }
     if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Visible'; $btnAzureSignOut.IsEnabled = $true }
     if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $true }
+    if ($btnAzureHistory) {
+      $hasHistory = ($script:Prefs.AzureHistory -and $script:Prefs.AzureHistory.Count -gt 0)
+      $btnAzureHistory.IsEnabled = $hasHistory
+    }
+    if ($tbAzureDevice) { $tbAzureDevice.IsEnabled = $true }
+    if ($lblAzureSearchHint) {
+      $lblAzureSearchHint.Visibility = 'Visible'
+      $lblAzureSearchHint.Text = $script:t.lblAzureSearchHintSignedIn
+    }
   } elseif ($connecting) {
-    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible' }
+    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible'; $btnAzureSignIn.IsEnabled = $false }
     if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Collapsed' }
     $connectingText = if ($script:t -and $script:t.ContainsKey('lblAzureStatusConnecting')) { $script:t.lblAzureStatusConnecting } else { 'Signing in…' }
     $lblAzureStatus.Text = $connectingText
     if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $false }
+    if ($btnAzureHistory) { $btnAzureHistory.IsEnabled = $false }
+    if ($tbAzureDevice) { $tbAzureDevice.IsEnabled = $false }
+    if ($lblAzureSearchHint) {
+      $lblAzureSearchHint.Visibility = 'Visible'
+      $lblAzureSearchHint.Text = $script:t.lblAzureSearchHintConnecting
+    }
   } else {
     $lblAzureStatus.Text = $script:t.lblAzureStatusSignedOut
-    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible'; $btnAzureSignIn.IsEnabled = -not ($script:AzureState -and $script:AzureState.IsConnecting) }
+    if ($btnAzureSignIn) {
+      $btnAzureSignIn.Visibility = 'Visible'
+      $btnAzureSignIn.IsEnabled = -not ($script:AzureState -and $script:AzureState.IsConnecting)
+    }
     if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Collapsed' }
     if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $false }
+    if ($btnAzureHistory) { $btnAzureHistory.IsEnabled = $false }
+    if ($tbAzureDevice) { $tbAzureDevice.IsEnabled = $false }
+    if ($lblAzureSearchHint) {
+      $lblAzureSearchHint.Visibility = 'Visible'
+      $lblAzureSearchHint.Text = $script:t.lblAzureSearchHintSignedOut
+    }
+    if ($popAzureDevice) { $popAzureDevice.IsOpen = $false }
   }
   if ($btnAzureSignIn -and $script:AzureState -and $script:AzureState.IsConnecting) {
     $btnAzureSignIn.IsEnabled = $false
   }
   if ($btnAzureSearch -and $script:AzureState -and $script:AzureState.IsConnecting) {
     $btnAzureSearch.IsEnabled = $false
+  }
+  if ($btnAzureHistory -and $script:AzureState -and $script:AzureState.IsConnecting) {
+    $btnAzureHistory.IsEnabled = $false
+  }
+  if ($tbAzureDevice -and $script:AzureState -and $script:AzureState.IsConnecting) {
+    $tbAzureDevice.IsEnabled = $false
   }
 }
 
@@ -1066,7 +1111,7 @@ function Show-UpdatePrompt {
     </Grid>
   </TabItem>
   <TabItem Header="LAPS (Intune)" x:Name="tabAzure">
-    <Grid Margin="20" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
+    <Grid Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
@@ -1075,20 +1120,30 @@ function Show-UpdatePrompt {
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
-      <GroupBox Grid.Row="0" Header="Authentication" x:Name="gbAzureAuth">
+      <GroupBox Grid.Row="0" Header="Authentication" x:Name="gbAzureAuth" Margin="0,0,0,12">
         <Grid>
           <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" x:Name="lblAzureStatus" Text="Not signed in" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
-          <Button Grid.Column="1" x:Name="btnAzureSignIn" Content="Sign in" Style="{StaticResource AccentButton}" Margin="12,0,0,0"/>
-          <Button Grid.Column="2" x:Name="btnAzureSignOut" Content="Sign out" Style="{StaticResource AccentButton}" Margin="12,0,0,0" Visibility="Collapsed"/>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" Text="Application (client) ID" x:Name="lblAzureClientId"/>
+          <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" x:Name="tbAzureClientId" Margin="0,0,0,8"/>
+          <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" Text="Tenant ID" x:Name="lblAzureTenantId"/>
+          <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="tbAzureTenantId" Margin="0,0,0,8"/>
+          <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" x:Name="lblAzureStatus" Text="Not signed in" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" Margin="0,8,0,0"/>
+          <Button Grid.Row="2" Grid.Column="2" x:Name="btnAzureSignIn" Content="Sign in" Style="{StaticResource AccentButton}" Margin="12,8,0,0"/>
+          <Button Grid.Row="2" Grid.Column="3" x:Name="btnAzureSignOut" Content="Sign out" Style="{StaticResource AccentButton}" Margin="12,8,0,0" Visibility="Collapsed"/>
         </Grid>
       </GroupBox>
 
-      <GroupBox Grid.Row="1" Header="Search" x:Name="gbAzureSearch">
+      <GroupBox Grid.Row="1" Header="Search" x:Name="gbAzureSearch" Margin="0,0,0,12">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -1096,10 +1151,15 @@ function Show-UpdatePrompt {
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Device name" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}" x:Name="lblAzureDeviceName"/>
-          <TextBox Grid.Column="1" x:Name="tbAzureDevice"/>
-          <Button Grid.Column="2" x:Name="btnAzureHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource IconButton}" Margin="12,0,0,0" ToolTip="History"/>
-          <Button Grid.Column="3" x:Name="btnAzureSearch" Content="Retrieve" Style="{StaticResource AccentButton}" Margin="12,0,0,0"/>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Device name" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}" x:Name="lblAzureDeviceName"/>
+          <TextBox Grid.Row="0" Grid.Column="1" x:Name="tbAzureDevice"/>
+          <Button Grid.Row="0" Grid.Column="2" x:Name="btnAzureHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource IconButton}" Margin="12,0,0,0" ToolTip="History"/>
+          <Button Grid.Row="0" Grid.Column="3" x:Name="btnAzureSearch" Content="Retrieve" Style="{StaticResource AccentButton}" Margin="12,0,0,0"/>
+          <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" x:Name="lblAzureSearchHint" Text="Sign in to enable Intune search." Margin="0,8,0,0" Foreground="{DynamicResource LabelBrush}" TextWrapping="Wrap"/>
           <Popup x:Name="popAzureDevice" PlacementTarget="{Binding ElementName=tbAzureDevice}" Placement="Bottom" StaysOpen="False">
             <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
               <ListBox x:Name="lbAzureDeviceHistory" MaxHeight="200" Width="{Binding ElementName=tbAzureDevice, Path=ActualWidth}" Background="#2D2D2D" Foreground="#EEEEEE"/>
@@ -1108,7 +1168,7 @@ function Show-UpdatePrompt {
         </Grid>
       </GroupBox>
 
-      <GroupBox Grid.Row="2" Header="Devices" x:Name="gbAzureDevices" Visibility="Collapsed">
+      <GroupBox Grid.Row="2" Header="Devices" x:Name="gbAzureDevices" Visibility="Collapsed" Margin="0,0,0,12">
         <Grid>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -1117,7 +1177,7 @@ function Show-UpdatePrompt {
         </Grid>
       </GroupBox>
 
-      <GroupBox Grid.Row="3" Header="Details" x:Name="gbAzureDetails" Visibility="Collapsed">
+      <GroupBox Grid.Row="3" Header="Details" x:Name="gbAzureDetails" Visibility="Collapsed" Margin="0,0,0,12">
         <Grid>
           <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -1457,6 +1517,8 @@ $translations = @{
     btnCopy         = 'Copy'
     btnAzureSignIn  = 'Sign in'
     btnAzureSignOut = 'Sign out'
+    lblAzureClientId = 'Application (client) ID'
+    lblAzureTenantId = 'Tenant ID'
     gbSecurity      = 'Security'
     cbLdaps         = 'Use LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Enable clipboard auto-clear'
@@ -1486,6 +1548,9 @@ $translations = @{
     lblAzureStatusSignedOut = 'Not signed in'
     lblAzureStatusConnecting = 'Signing in…'
     lblAzureStatusSignedIn  = 'Connected as {0}'
+    lblAzureSearchHintSignedOut = 'Sign in to enable Intune search.'
+    lblAzureSearchHintConnecting = 'Complete the browser sign-in to continue.'
+    lblAzureSearchHintSignedIn  = 'Enter an Intune device name and click Retrieve.'
     msgAzureConnectFirst = 'Please sign in to Microsoft Graph first.'
     msgAzureNoDevices = 'No Intune devices matched your query.'
     msgAzureMultipleDevices = 'Select a device to retrieve the password.'
@@ -1516,6 +1581,8 @@ $translations = @{
     btnCopy         = 'Copier'
     btnAzureSignIn  = 'Se connecter'
     btnAzureSignOut = 'Se déconnecter'
+    lblAzureClientId = "ID d'application (client)"
+    lblAzureTenantId = 'ID de locataire'
     gbSecurity      = 'Sécurité'
     cbLdaps         = 'Utiliser LDAPS (TLS 636)'
     cbClipboardAutoClear = "Activer l'effacement automatique du presse-papiers"
@@ -1545,6 +1612,9 @@ $translations = @{
     lblAzureStatusSignedOut = 'Non connecté'
     lblAzureStatusConnecting = 'Connexion en cours…'
     lblAzureStatusSignedIn  = 'Connecté en tant que {0}'
+    lblAzureSearchHintSignedOut = 'Connectez-vous pour activer la recherche Intune.'
+    lblAzureSearchHintConnecting = 'Terminez l’authentification dans le navigateur pour continuer.'
+    lblAzureSearchHintSignedIn  = 'Saisissez le nom d’un appareil Intune puis cliquez sur Récupérer.'
     msgAzureConnectFirst = "Veuillez d'abord vous connecter à Microsoft Graph."
     msgAzureNoDevices = 'Aucun appareil Intune ne correspond à votre requête.'
     msgAzureMultipleDevices = 'Sélectionnez un appareil pour récupérer le mot de passe.'
@@ -1575,6 +1645,8 @@ $translations = @{
     btnCopy         = 'Copiar'
     btnAzureSignIn  = 'Iniciar sesión'
     btnAzureSignOut = 'Cerrar sesión'
+    lblAzureClientId = 'ID de aplicación (cliente)'
+    lblAzureTenantId = 'ID de inquilino'
     gbSecurity      = 'Seguridad'
     cbLdaps         = 'Usar LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Habilitar borrado automático del portapapeles'
@@ -1604,6 +1676,9 @@ $translations = @{
     lblAzureStatusSignedOut = 'No conectado'
     lblAzureStatusConnecting = 'Conectando…'
     lblAzureStatusSignedIn  = 'Conectado como {0}'
+    lblAzureSearchHintSignedOut = 'Inicie sesión para habilitar la búsqueda de Intune.'
+    lblAzureSearchHintConnecting = 'Complete el inicio de sesión del navegador para continuar.'
+    lblAzureSearchHintSignedIn  = 'Escriba el nombre de un dispositivo de Intune y haga clic en Obtener.'
     msgAzureConnectFirst = 'Inicie sesión en Microsoft Graph primero.'
     msgAzureNoDevices = 'Ningún dispositivo de Intune coincide con la búsqueda.'
     msgAzureMultipleDevices = 'Seleccione un dispositivo para obtener la contraseña.'
@@ -1634,6 +1709,8 @@ $translations = @{
     btnCopy         = 'Copia'
     btnAzureSignIn  = 'Accedi'
     btnAzureSignOut = 'Disconnetti'
+    lblAzureClientId = 'ID applicazione (client)'
+    lblAzureTenantId = 'ID tenant'
     gbSecurity      = 'Sicurezza'
     cbLdaps         = 'Usa LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Abilita pulizia automatica degli appunti'
@@ -1663,6 +1740,9 @@ $translations = @{
     lblAzureStatusSignedOut = 'Non connesso'
     lblAzureStatusConnecting = 'Connessione in corso…'
     lblAzureStatusSignedIn  = 'Connesso come {0}'
+    lblAzureSearchHintSignedOut = 'Accedi per abilitare la ricerca Intune.'
+    lblAzureSearchHintConnecting = 'Completa l’accesso nel browser per continuare.'
+    lblAzureSearchHintSignedIn  = 'Inserisci il nome di un dispositivo Intune e fai clic su Recupera.'
     msgAzureConnectFirst = 'Accedere prima a Microsoft Graph.'
     msgAzureNoDevices = 'Nessun dispositivo Intune corrisponde alla ricerca.'
     msgAzureMultipleDevices = 'Seleziona un dispositivo per recuperare la password.'
@@ -1693,6 +1773,8 @@ $translations = @{
     btnCopy         = 'Kopieren'
     btnAzureSignIn  = 'Anmelden'
     btnAzureSignOut = 'Abmelden'
+    lblAzureClientId = 'Anwendungs-ID (Client-ID)'
+    lblAzureTenantId = 'Mandanten-ID'
     gbSecurity      = 'Sicherheit'
     cbLdaps         = 'LDAPS verwenden (TLS 636)'
     cbClipboardAutoClear = 'Zwischenablage automatisch löschen aktivieren'
@@ -1722,6 +1804,9 @@ $translations = @{
     lblAzureStatusSignedOut = 'Nicht angemeldet'
     lblAzureStatusConnecting = 'Anmeldung läuft…'
     lblAzureStatusSignedIn  = 'Als {0} verbunden'
+    lblAzureSearchHintSignedOut = 'Melden Sie sich an, um die Intune-Suche zu aktivieren.'
+    lblAzureSearchHintConnecting = 'Schließen Sie die Anmeldung im Browser ab, um fortzufahren.'
+    lblAzureSearchHintSignedIn  = 'Geben Sie den Namen eines Intune-Geräts ein und klicken Sie auf Abrufen.'
     msgAzureConnectFirst = 'Bitte melden Sie sich zuerst bei Microsoft Graph an.'
     msgAzureNoDevices = 'Keine Intune-Geräte entsprechen Ihrer Suche.'
     msgAzureMultipleDevices = 'Wählen Sie ein Gerät aus, um das Kennwort abzurufen.'
@@ -1752,6 +1837,8 @@ $translations = @{
     btnCopy         = 'Copiar'
     btnAzureSignIn  = 'Entrar'
     btnAzureSignOut = 'Sair'
+    lblAzureClientId = 'ID do aplicativo (cliente)'
+    lblAzureTenantId = 'ID do locatário'
     gbSecurity      = 'Segurança'
     cbLdaps         = 'Usar LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Ativar limpeza automática da área de transferência'
@@ -1781,6 +1868,9 @@ $translations = @{
     lblAzureStatusSignedOut = 'Não conectado'
     lblAzureStatusConnecting = 'Conectando…'
     lblAzureStatusSignedIn  = 'Conectado como {0}'
+    lblAzureSearchHintSignedOut = 'Entre para habilitar a pesquisa do Intune.'
+    lblAzureSearchHintConnecting = 'Conclua a entrada no navegador para continuar.'
+    lblAzureSearchHintSignedIn  = 'Digite o nome de um dispositivo Intune e clique em Obter.'
     msgAzureConnectFirst = 'Conecte-se primeiro ao Microsoft Graph.'
     msgAzureNoDevices = 'Nenhum dispositivo do Intune corresponde à sua consulta.'
     msgAzureMultipleDevices = 'Selecione um dispositivo para obter a senha.'
@@ -1811,6 +1901,8 @@ $translations = @{
     btnCopy         = '复制'
     btnAzureSignIn  = '登录'
     btnAzureSignOut = '注销'
+    lblAzureClientId = '应用程序 (客户端) ID'
+    lblAzureTenantId = '租户 ID'
     gbSecurity      = '安全'
     cbLdaps         = '使用 LDAPS (TLS 636)'
     cbClipboardAutoClear = '启用剪贴板自动清除'
@@ -1840,6 +1932,9 @@ $translations = @{
     lblAzureStatusSignedOut = '未登录'
     lblAzureStatusConnecting = '正在登录…'
     lblAzureStatusSignedIn  = '已连接为 {0}'
+    lblAzureSearchHintSignedOut = '登录后才能启用 Intune 搜索。'
+    lblAzureSearchHintConnecting = '请在浏览器中完成登录以继续。'
+    lblAzureSearchHintSignedIn  = '输入 Intune 设备名称，然后单击“获取”。'
     msgAzureConnectFirst = '请先登录 Microsoft Graph。'
     msgAzureNoDevices = '没有匹配的 Intune 设备。'
     msgAzureMultipleDevices = '选择一个设备以检索密码。'
@@ -1870,6 +1965,8 @@ $translations = @{
     btnCopy         = 'نسخ'
     btnAzureSignIn  = 'تسجيل الدخول'
     btnAzureSignOut = 'تسجيل الخروج'
+    lblAzureClientId = 'معرّف التطبيق (العميل)'
+    lblAzureTenantId = 'معرّف المستأجر'
     gbSecurity      = 'الأمان'
     cbLdaps         = 'استخدام LDAPS ‏(TLS 636)'
     cbClipboardAutoClear = 'تمكين المسح التلقائي للحافظة'
@@ -1899,6 +1996,9 @@ $translations = @{
     lblAzureStatusSignedOut = 'غير مسجل الدخول'
     lblAzureStatusConnecting = 'جارٍ تسجيل الدخول…'
     lblAzureStatusSignedIn  = 'متصل باسم {0}'
+    lblAzureSearchHintSignedOut = 'سجّل الدخول لتفعيل بحث Intune.'
+    lblAzureSearchHintConnecting = 'أكمل تسجيل الدخول في المستعرض للمتابعة.'
+    lblAzureSearchHintSignedIn  = 'أدخل اسم جهاز Intune ثم انقر فوق استرجاع.'
     msgAzureConnectFirst = 'يرجى تسجيل الدخول إلى Microsoft Graph أولاً.'
     msgAzureNoDevices = 'لا توجد أجهزة Intune مطابقة لطلبك.'
     msgAzureMultipleDevices = 'حدد جهازًا لاسترجاع كلمة المرور.'
@@ -1940,6 +2040,8 @@ function Apply-Language {
   if ($cbAzureShow) { $cbAzureShow.Content = $t.cbShow }
   if ($btnAzureSignIn) { $btnAzureSignIn.Content = $t.btnAzureSignIn }
   if ($btnAzureSignOut) { $btnAzureSignOut.Content = $t.btnAzureSignOut }
+  if ($lblAzureClientId) { $lblAzureClientId.Text = $t.lblAzureClientId }
+  if ($lblAzureTenantId) { $lblAzureTenantId.Text = $t.lblAzureTenantId }
   $gbSecurity.Header    = $t.gbSecurity
   $cbLdaps.Content      = $t.cbLdaps
   $cbClipboardAutoClear.Content = $t.cbClipboardAutoClear
@@ -1999,6 +2101,8 @@ $lblPass       = $window.FindName("lblPass")
 $lblController = $window.FindName("lblController")
 $lblCompName   = $window.FindName("lblCompName")
 $lblAzureDeviceName = $window.FindName("lblAzureDeviceName")
+$lblAzureClientId = $window.FindName("lblAzureClientId")
+$lblAzureTenantId = $window.FindName("lblAzureTenantId")
 $lblAzureStatus = $window.FindName("lblAzureStatus")
 $lblClipboardDelay = $window.FindName("lblClipboardDelay")
 $lblTheme      = $window.FindName("lblTheme")
@@ -2015,6 +2119,7 @@ $btnGet         = $window.FindName("btnGet")
 $btnRetry       = $window.FindName("btnRetry")
 $tbAzureDevice  = $window.FindName("tbAzureDevice")
 $btnAzureHistory= $window.FindName("btnAzureHistory")
+$lblAzureSearchHint = $window.FindName("lblAzureSearchHint")
 $popAzureDevice = $window.FindName("popAzureDevice")
 $lbAzureDeviceHistory = $window.FindName("lbAzureDeviceHistory")
 $btnAzureSearch = $window.FindName("btnAzureSearch")
@@ -2035,6 +2140,8 @@ $btnAzureCopy   = $window.FindName("btnAzureCopy")
 $lblAzureCountdown = $window.FindName("lblAzureCountdown")
 $btnAzureSignIn = $window.FindName("btnAzureSignIn")
 $btnAzureSignOut= $window.FindName("btnAzureSignOut")
+$tbAzureClientId = $window.FindName("tbAzureClientId")
+$tbAzureTenantId = $window.FindName("tbAzureTenantId")
 $rtbPwdOut      = $window.FindName("rtbPwdOut")   # NEW
 $pbPwdOut       = $window.FindName("pbPwdOut")
 $cbShow         = $window.FindName("cbShow")
@@ -2098,6 +2205,26 @@ function Save-Prefs {
   $adHistory = $script:Prefs.AdHistory
   $azureHistory = $script:Prefs.AzureHistory
   $ignore  = $script:Prefs.IgnoreVersion
+  $azureClientId = $null
+  if ($tbAzureClientId) {
+    $clientText = $tbAzureClientId.Text
+    if (-not [string]::IsNullOrWhiteSpace($clientText)) {
+      $azureClientId = $clientText.Trim()
+      $tbAzureClientId.Text = $azureClientId
+    } else {
+      $tbAzureClientId.Text = ''
+    }
+  }
+  $azureTenantId = $null
+  if ($tbAzureTenantId) {
+    $tenantText = $tbAzureTenantId.Text
+    if (-not [string]::IsNullOrWhiteSpace($tenantText)) {
+      $azureTenantId = $tenantText.Trim()
+      $tbAzureTenantId.Text = $azureTenantId
+    } else {
+      $tbAzureTenantId.Text = ''
+    }
+  }
   $script:Prefs = @{
     RememberUser        = [bool]$cbRememberUser.IsChecked
     UserName            = $(if ($cbRememberUser.IsChecked)   { Protect-String $tbUser.Text } else { $null })
@@ -2113,6 +2240,8 @@ function Save-Prefs {
     AdHistory           = $adHistory
     AzureHistory        = $azureHistory
     IgnoreVersion       = $ignore
+    AzureClientId       = $azureClientId
+    AzureTenantId       = $azureTenantId
   }
   $persist = $script:Prefs.Clone()
   $persist.AdHistory = @($adHistory | ForEach-Object { Protect-String $_ })
@@ -2133,6 +2262,8 @@ function Load-Prefs {
       if ($null -ne $loaded.ConfirmCopy) { $cbConfirmCopy.IsChecked = [bool]$loaded.ConfirmCopy }
       if ($loaded.Theme) { $cmbTheme.SelectedItem = $cmbTheme.Items | Where-Object { $_.Tag -eq $loaded.Theme } }
       if ($loaded.Language) { $cmbLanguage.SelectedItem = $cmbLanguage.Items | Where-Object { $_.Tag -eq $loaded.Language } }
+      if ($tbAzureClientId) { $tbAzureClientId.Text = $(if ($loaded.AzureClientId) { $loaded.AzureClientId }) }
+      if ($tbAzureTenantId) { $tbAzureTenantId.Text = $(if ($loaded.AzureTenantId) { $loaded.AzureTenantId }) }
       $adHist = @()
       $rawAd = if ($loaded.PSObject.Properties.Name -contains 'AdHistory') { $loaded.AdHistory } else { $loaded.History }
       if ($rawAd -is [System.Collections.IEnumerable]) {
@@ -2157,6 +2288,8 @@ function Load-Prefs {
   if (-not $script:Prefs.AzureHistory) { $script:Prefs.AzureHistory = @() }
   $tbClipboardSecs.Text = $script:ClipboardAutoClearSeconds
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
+  if ($tbAzureClientId -and -not $tbAzureClientId.Text) { $tbAzureClientId.Text = '' }
+  if ($tbAzureTenantId -and -not $tbAzureTenantId.Text) { $tbAzureTenantId.Text = '' }
 }
 Load-Prefs
 Apply-Theme $cmbTheme.SelectedItem.Tag
@@ -2173,6 +2306,8 @@ $tbUser.Add_LostFocus({ if ($cbRememberUser.IsChecked) { Save-Prefs } })
 $cbRememberServer.Add_Checked({ Save-Prefs })
 $cbRememberServer.Add_Unchecked({ Save-Prefs })
 $tbServer.Add_LostFocus({ if ($cbRememberServer.IsChecked) { Save-Prefs } })
+if ($tbAzureClientId) { $tbAzureClientId.Add_LostFocus({ Save-Prefs }) }
+if ($tbAzureTenantId) { $tbAzureTenantId.Add_LostFocus({ Save-Prefs }) }
 $window.Add_Closed({ Save-Prefs })
 
 $cbLdaps.Add_Checked({   $script:UseLdaps = $true;  Save-Prefs })
@@ -2275,11 +2410,25 @@ if ($btnAzureCopy) {
 # Azure events
 if ($btnAzureSignIn) {
   $btnAzureSignIn.Add_Click({
+    $clientId = $null
+    $tenantId = $null
+    if ($tbAzureClientId) {
+      $client = $tbAzureClientId.Text
+      if (-not [string]::IsNullOrWhiteSpace($client)) { $clientId = $client.Trim() }
+    }
+    if ($tbAzureTenantId) {
+      $tenant = $tbAzureTenantId.Text
+      if (-not [string]::IsNullOrWhiteSpace($tenant)) { $tenantId = $tenant.Trim() }
+    }
+    Save-Prefs
     try {
       if ($script:AzureState) { $script:AzureState.IsConnecting = $true }
       Update-AzureStatusLabel
       $window.Cursor = 'Wait'
-      $ctx = Connect-IntuneGraph -Scopes @('DeviceManagementManagedDevices.Read.All')
+      $connectArgs = @{ Scopes = @('DeviceManagementManagedDevices.Read.All') }
+      if ($clientId) { $connectArgs.ClientId = $clientId }
+      if ($tenantId) { $connectArgs.TenantId = $tenantId }
+      $ctx = Connect-IntuneGraph @connectArgs
       if ($ctx -and $script:AzureState) {
         $script:AzureState.IsConnected = $true
         $script:AzureState.Account = $ctx.Account
@@ -2348,6 +2497,7 @@ if ($tbAzureDevice) {
 
 if ($btnAzureHistory) {
   $btnAzureHistory.Add_Click({
+    if (-not ($script:AzureState -and $script:AzureState.IsConnected)) { return }
     if ($script:Prefs.AzureHistory -and $script:Prefs.AzureHistory.Count -gt 0) {
       $lbAzureDeviceHistory.ItemsSource = $script:Prefs.AzureHistory
       $lbAzureDeviceHistory.SelectedIndex = 0
@@ -2407,6 +2557,7 @@ if ($btnAzureSearch) {
         $script:Prefs.AzureHistory = @($norm) + @($script:Prefs.AzureHistory | Where-Object { $_ -ne $norm })
         if ($script:Prefs.AzureHistory.Count -gt 50) { $script:Prefs.AzureHistory = $script:Prefs.AzureHistory[0..49] }
         Save-Prefs
+        Update-AzureStatusLabel
       }
       $items = @()
       foreach ($dev in $devices) {
