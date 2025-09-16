@@ -162,8 +162,8 @@ function Update-ComputerSuggestions {
       $n = Get-FirstValue ($r.Properties['sAMAccountName'])
       if ($n) { $names[(Normalize-ComputerName $n)] = $true }
     }
-    if ($script:Prefs.History) {
-      foreach ($h in $script:Prefs.History) {
+    if ($script:Prefs.AdHistory) {
+      foreach ($h in $script:Prefs.AdHistory) {
         if ($h -like "$Prefix*") { $names[$h] = $true }
       }
     }
@@ -494,7 +494,7 @@ function Show-UpdatePrompt {
   </Window.Resources>
 
   <TabControl Margin="0" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}" BorderThickness="0">
-    <TabItem Header="Main" x:Name="tabMain">
+  <TabItem Header="LAPS (AD)" x:Name="tabMain">
       <Grid Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
@@ -605,6 +605,96 @@ function Show-UpdatePrompt {
         <Button x:Name="btnUpdate" Content="Update" Style="{StaticResource AccentButton}" Visibility="Collapsed"/>
         <Button x:Name="btnIgnore" Content="Ignore" Style="{StaticResource AccentButton}" Margin="8,0,0,0" Visibility="Collapsed"/>
       </StackPanel>
+    </Grid>
+  </TabItem>
+  <TabItem Header="LAPS (Intune)" x:Name="tabAzure">
+    <Grid Margin="20" Background="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=Background}">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <GroupBox Grid.Row="0" Header="Authentication" x:Name="gbAzureAuth">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0" x:Name="lblAzureStatus" Text="Not signed in" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}"/>
+          <Button Grid.Column="1" x:Name="btnAzureSignIn" Content="Sign in" Style="{StaticResource AccentButton}" Margin="12,0,0,0"/>
+          <Button Grid.Column="2" x:Name="btnAzureSignOut" Content="Sign out" Style="{StaticResource AccentButton}" Margin="12,0,0,0" Visibility="Collapsed"/>
+        </Grid>
+      </GroupBox>
+
+      <GroupBox Grid.Row="1" Header="Search" x:Name="gbAzureSearch">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Device name" Margin="0,0,12,0" Foreground="{DynamicResource LabelBrush}" x:Name="lblAzureDeviceName"/>
+          <TextBox Grid.Column="1" x:Name="tbAzureDevice"/>
+          <Button Grid.Column="2" x:Name="btnAzureHistory" Content="&#xE81C;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource IconButton}" Margin="12,0,0,0" ToolTip="History"/>
+          <Button Grid.Column="3" x:Name="btnAzureSearch" Content="Retrieve" Style="{StaticResource AccentButton}" Margin="12,0,0,0"/>
+          <Popup x:Name="popAzureDevice" PlacementTarget="{Binding ElementName=tbAzureDevice}" Placement="Bottom" StaysOpen="False">
+            <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#2D2D2D">
+              <ListBox x:Name="lbAzureDeviceHistory" MaxHeight="200" Width="{Binding ElementName=tbAzureDevice, Path=ActualWidth}" Background="#2D2D2D" Foreground="#EEEEEE"/>
+            </Border>
+          </Popup>
+        </Grid>
+      </GroupBox>
+
+      <GroupBox Grid.Row="2" Header="Devices" x:Name="gbAzureDevices" Visibility="Collapsed">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <ListBox x:Name="lbAzureDevices" Height="140" DisplayMemberPath="DisplayName" Background="#2D2D2D" Foreground="#EEEEEE"/>
+        </Grid>
+      </GroupBox>
+
+      <GroupBox Grid.Row="3" Header="Details" x:Name="gbAzureDetails" Visibility="Collapsed">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <TextBox Grid.Row="0" x:Name="txtAzureDetails" Height="80" AcceptsReturn="True" IsReadOnly="True" VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Code,Consolas" FontSize="12"/>
+          <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0" x:Name="spAzureExpire" Visibility="Collapsed">
+            <Ellipse Width="10" Height="10" Margin="0,0,8,0" x:Name="ellAzureExpire"/>
+            <TextBlock VerticalAlignment="Center" x:Name="lblAzureExpire"/>
+          </StackPanel>
+        </Grid>
+      </GroupBox>
+
+      <GroupBox Grid.Row="4" Header="LAPS Password" x:Name="gbAzurePwd">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <RichTextBox Grid.Row="0" Grid.Column="0" x:Name="rtbAzurePwd" Visibility="Collapsed" Focusable="False" IsHitTestVisible="False"/>
+
+          <PasswordBox Grid.Row="0" Grid.Column="0" x:Name="pbAzurePwd" FontFamily="Cascadia Code,Consolas" FontSize="20" IsHitTestVisible="False" Focusable="False"/>
+
+          <CheckBox Grid.Row="0" Grid.Column="1" x:Name="cbAzureShow" Content="Show" Margin="12,6,12,0" VerticalAlignment="Center"/>
+          <Button Grid.Row="0" Grid.Column="2" x:Name="btnAzureCopy" Content="Copy" Style="{StaticResource AccentButton}" IsEnabled="False"/>
+
+          <TextBlock Grid.Row="1" Grid.Column="0" x:Name="lblAzureCountdown" Margin="0,8,0,0" Foreground="#FFA07A" Visibility="Collapsed"/>
+        </Grid>
+      </GroupBox>
     </Grid>
   </TabItem>
   <TabItem Header="Settings" x:Name="tabSettings">
@@ -886,10 +976,13 @@ function Apply-Theme {
 # Localization
 $translations = @{
   English = @{
-    tabMain         = 'Main'
+    tabMain         = 'LAPS (AD)'
+    tabAzure        = 'LAPS (Intune)'
     tabSettings     = 'Settings'
     gbCreds         = 'Credentials'
     gbAD            = 'Active Directory Target'
+    gbAzureAuth     = 'Authentication'
+    gbAzureDevices  = 'Devices'
     gbSearch        = 'Search'
     gbDetails       = 'Details'
     gbPwd           = 'LAPS Password'
@@ -904,6 +997,8 @@ $translations = @{
     btnIgnore       = 'Ignore'
     cbShow          = 'Show'
     btnCopy         = 'Copy'
+    btnAzureSignIn  = 'Sign in'
+    btnAzureSignOut = 'Sign out'
     gbSecurity      = 'Security'
     cbLdaps         = 'Use LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Enable clipboard auto-clear'
@@ -930,12 +1025,21 @@ $translations = @{
     langChinese     = 'Chinese'
     langArabic      = 'Arabic'
     btnHistory_ToolTip = 'History'
+    lblAzureStatusSignedOut = 'Not signed in'
+    lblAzureStatusSignedIn  = 'Connected as {0}'
+    msgAzureConnectFirst = 'Please sign in to Microsoft Graph first.'
+    msgAzureNoDevices = 'No Intune devices matched your query.'
+    msgAzureMultipleDevices = 'Select a device to retrieve the password.'
+    msgAzureInstallModule = 'Microsoft.Graph PowerShell module is required.'
   }
   French = @{
-    tabMain         = 'Principal'
+    tabMain         = 'LAPS (AD)'
+    tabAzure        = 'LAPS (Intune)'
     tabSettings     = 'Paramètres'
     gbCreds         = 'Identifiants'
     gbAD            = 'Cible Active Directory'
+    gbAzureAuth     = 'Authentification'
+    gbAzureDevices  = 'Appareils'
     gbSearch        = 'Recherche'
     gbDetails       = 'Détails'
     gbPwd           = 'Mot de passe LAPS'
@@ -950,6 +1054,8 @@ $translations = @{
     btnIgnore       = 'Ignorer'
     cbShow          = 'Afficher'
     btnCopy         = 'Copier'
+    btnAzureSignIn  = 'Se connecter'
+    btnAzureSignOut = 'Se déconnecter'
     gbSecurity      = 'Sécurité'
     cbLdaps         = 'Utiliser LDAPS (TLS 636)'
     cbClipboardAutoClear = "Activer l'effacement automatique du presse-papiers"
@@ -976,12 +1082,21 @@ $translations = @{
     langChinese     = 'Chinois'
     langArabic      = 'Arabe'
     btnHistory_ToolTip = 'Historique'
+    lblAzureStatusSignedOut = 'Non connecté'
+    lblAzureStatusSignedIn  = 'Connecté en tant que {0}'
+    msgAzureConnectFirst = 'Veuillez d\'abord vous connecter à Microsoft Graph.'
+    msgAzureNoDevices = 'Aucun appareil Intune ne correspond à votre requête.'
+    msgAzureMultipleDevices = 'Sélectionnez un appareil pour récupérer le mot de passe.'
+    msgAzureInstallModule = 'Le module PowerShell Microsoft.Graph est requis.'
   }
   Spanish = @{
-    tabMain         = 'Principal'
+    tabMain         = 'LAPS (AD)'
+    tabAzure        = 'LAPS (Intune)'
     tabSettings     = 'Configuración'
     gbCreds         = 'Credenciales'
     gbAD            = 'Destino de Active Directory'
+    gbAzureAuth     = 'Autenticación'
+    gbAzureDevices  = 'Dispositivos'
     gbSearch        = 'Búsqueda'
     gbDetails       = 'Detalles'
     gbPwd           = 'Contraseña LAPS'
@@ -996,6 +1111,8 @@ $translations = @{
     btnIgnore       = 'Ignorar'
     cbShow          = 'Mostrar'
     btnCopy         = 'Copiar'
+    btnAzureSignIn  = 'Iniciar sesión'
+    btnAzureSignOut = 'Cerrar sesión'
     gbSecurity      = 'Seguridad'
     cbLdaps         = 'Usar LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Habilitar borrado automático del portapapeles'
@@ -1022,12 +1139,21 @@ $translations = @{
     langChinese     = 'Chino'
     langArabic      = 'Árabe'
     btnHistory_ToolTip = 'Historial'
+    lblAzureStatusSignedOut = 'No conectado'
+    lblAzureStatusSignedIn  = 'Conectado como {0}'
+    msgAzureConnectFirst = 'Inicie sesión en Microsoft Graph primero.'
+    msgAzureNoDevices = 'Ningún dispositivo de Intune coincide con la búsqueda.'
+    msgAzureMultipleDevices = 'Seleccione un dispositivo para obtener la contraseña.'
+    msgAzureInstallModule = 'Se requiere el módulo de PowerShell Microsoft.Graph.'
   }
   Italian = @{
-    tabMain         = 'Principale'
+    tabMain         = 'LAPS (AD)'
+    tabAzure        = 'LAPS (Intune)'
     tabSettings     = 'Impostazioni'
     gbCreds         = 'Credenziali'
     gbAD            = 'Destinazione Active Directory'
+    gbAzureAuth     = 'Autenticazione'
+    gbAzureDevices  = 'Dispositivi'
     gbSearch        = 'Ricerca'
     gbDetails       = 'Dettagli'
     gbPwd           = 'Password LAPS'
@@ -1042,6 +1168,8 @@ $translations = @{
     btnIgnore       = 'Ignora'
     cbShow          = 'Mostra'
     btnCopy         = 'Copia'
+    btnAzureSignIn  = 'Accedi'
+    btnAzureSignOut = 'Disconnetti'
     gbSecurity      = 'Sicurezza'
     cbLdaps         = 'Usa LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Abilita pulizia automatica degli appunti'
@@ -1068,12 +1196,21 @@ $translations = @{
     langChinese     = 'Cinese'
     langArabic      = 'Arabo'
     btnHistory_ToolTip = 'Cronologia'
+    lblAzureStatusSignedOut = 'Non connesso'
+    lblAzureStatusSignedIn  = 'Connesso come {0}'
+    msgAzureConnectFirst = 'Accedere prima a Microsoft Graph.'
+    msgAzureNoDevices = 'Nessun dispositivo Intune corrisponde alla ricerca.'
+    msgAzureMultipleDevices = 'Seleziona un dispositivo per recuperare la password.'
+    msgAzureInstallModule = 'È necessario il modulo Microsoft.Graph per PowerShell.'
   }
   German = @{
-    tabMain         = 'Start'
+    tabMain         = 'LAPS (AD)'
+    tabAzure        = 'LAPS (Intune)'
     tabSettings     = 'Einstellungen'
     gbCreds         = 'Anmeldedaten'
     gbAD            = 'Active Directory Ziel'
+    gbAzureAuth     = 'Authentifizierung'
+    gbAzureDevices  = 'Geräte'
     gbSearch        = 'Suche'
     gbDetails       = 'Details'
     gbPwd           = 'LAPS Passwort'
@@ -1088,6 +1225,8 @@ $translations = @{
     btnIgnore       = 'Ignorieren'
     cbShow          = 'Anzeigen'
     btnCopy         = 'Kopieren'
+    btnAzureSignIn  = 'Anmelden'
+    btnAzureSignOut = 'Abmelden'
     gbSecurity      = 'Sicherheit'
     cbLdaps         = 'LDAPS verwenden (TLS 636)'
     cbClipboardAutoClear = 'Zwischenablage automatisch löschen aktivieren'
@@ -1114,12 +1253,21 @@ $translations = @{
     langChinese     = 'Chinesisch'
     langArabic      = 'Arabisch'
     btnHistory_ToolTip = 'Verlauf'
+    lblAzureStatusSignedOut = 'Nicht angemeldet'
+    lblAzureStatusSignedIn  = 'Als {0} verbunden'
+    msgAzureConnectFirst = 'Bitte melden Sie sich zuerst bei Microsoft Graph an.'
+    msgAzureNoDevices = 'Keine Intune-Geräte entsprechen Ihrer Suche.'
+    msgAzureMultipleDevices = 'Wählen Sie ein Gerät aus, um das Kennwort abzurufen.'
+    msgAzureInstallModule = 'Das Microsoft.Graph PowerShell-Modul ist erforderlich.'
   }
   Portuguese = @{
-    tabMain         = 'Principal'
+    tabMain         = 'LAPS (AD)'
+    tabAzure        = 'LAPS (Intune)'
     tabSettings     = 'Configurações'
     gbCreds         = 'Credenciais'
     gbAD            = 'Destino do Active Directory'
+    gbAzureAuth     = 'Autenticação'
+    gbAzureDevices  = 'Dispositivos'
     gbSearch        = 'Pesquisar'
     gbDetails       = 'Detalhes'
     gbPwd           = 'Senha LAPS'
@@ -1134,6 +1282,8 @@ $translations = @{
     btnIgnore       = 'Ignorar'
     cbShow          = 'Mostrar'
     btnCopy         = 'Copiar'
+    btnAzureSignIn  = 'Entrar'
+    btnAzureSignOut = 'Sair'
     gbSecurity      = 'Segurança'
     cbLdaps         = 'Usar LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Ativar limpeza automática da área de transferência'
@@ -1160,12 +1310,21 @@ $translations = @{
     langChinese     = 'Chinês'
     langArabic      = 'Árabe'
     btnHistory_ToolTip = 'Histórico'
+    lblAzureStatusSignedOut = 'Não conectado'
+    lblAzureStatusSignedIn  = 'Conectado como {0}'
+    msgAzureConnectFirst = 'Conecte-se primeiro ao Microsoft Graph.'
+    msgAzureNoDevices = 'Nenhum dispositivo do Intune corresponde à sua consulta.'
+    msgAzureMultipleDevices = 'Selecione um dispositivo para obter a senha.'
+    msgAzureInstallModule = 'É necessário o módulo Microsoft.Graph PowerShell.'
   }
   Chinese = @{
-    tabMain         = '主要'
+    tabMain         = 'LAPS (AD)'
+    tabAzure        = 'LAPS (Intune)'
     tabSettings     = '设置'
     gbCreds         = '凭据'
     gbAD            = 'Active Directory 目标'
+    gbAzureAuth     = '身份验证'
+    gbAzureDevices  = '设备'
     gbSearch        = '搜索'
     gbDetails       = '详细信息'
     gbPwd           = 'LAPS 密码'
@@ -1180,6 +1339,8 @@ $translations = @{
     btnIgnore       = '忽略'
     cbShow          = '显示'
     btnCopy         = '复制'
+    btnAzureSignIn  = '登录'
+    btnAzureSignOut = '注销'
     gbSecurity      = '安全'
     cbLdaps         = '使用 LDAPS (TLS 636)'
     cbClipboardAutoClear = '启用剪贴板自动清除'
@@ -1206,12 +1367,21 @@ $translations = @{
     langChinese     = '中文'
     langArabic      = '阿拉伯语'
     btnHistory_ToolTip = '历史'
+    lblAzureStatusSignedOut = '未登录'
+    lblAzureStatusSignedIn  = '已连接为 {0}'
+    msgAzureConnectFirst = '请先登录 Microsoft Graph。'
+    msgAzureNoDevices = '没有匹配的 Intune 设备。'
+    msgAzureMultipleDevices = '选择一个设备以检索密码。'
+    msgAzureInstallModule = '需要 Microsoft.Graph PowerShell 模块。'
   }
   Arabic = @{
-    tabMain         = 'الرئيسية'
+    tabMain         = 'LAPS (AD)'
+    tabAzure        = 'LAPS (Intune)'
     tabSettings     = 'الإعدادات'
     gbCreds         = 'بيانات الاعتماد'
     gbAD            = 'هدف Active Directory'
+    gbAzureAuth     = 'المصادقة'
+    gbAzureDevices  = 'الأجهزة'
     gbSearch        = 'بحث'
     gbDetails       = 'تفاصيل'
     gbPwd           = 'كلمة مرور LAPS'
@@ -1226,6 +1396,8 @@ $translations = @{
     btnIgnore       = 'تجاهل'
     cbShow          = 'إظهار'
     btnCopy         = 'نسخ'
+    btnAzureSignIn  = 'تسجيل الدخول'
+    btnAzureSignOut = 'تسجيل الخروج'
     gbSecurity      = 'الأمان'
     cbLdaps         = 'استخدام LDAPS ‏(TLS 636)'
     cbClipboardAutoClear = 'تمكين المسح التلقائي للحافظة'
@@ -1252,6 +1424,12 @@ $translations = @{
     langChinese     = 'الصينية'
     langArabic      = 'العربية'
     btnHistory_ToolTip = 'السجل'
+    lblAzureStatusSignedOut = 'غير مسجل الدخول'
+    lblAzureStatusSignedIn  = 'متصل باسم {0}'
+    msgAzureConnectFirst = 'يرجى تسجيل الدخول إلى Microsoft Graph أولاً.'
+    msgAzureNoDevices = 'لا توجد أجهزة Intune مطابقة لطلبك.'
+    msgAzureMultipleDevices = 'حدد جهازًا لاسترجاع كلمة المرور.'
+    msgAzureInstallModule = 'مطلوب وحدة Microsoft.Graph الخاصة بـ PowerShell.'
   }
 }
 
@@ -1260,22 +1438,34 @@ function Apply-Language {
   if (-not $Language -or -not $translations.ContainsKey($Language)) { $Language = 'English' }
   $script:t = $translations[$Language]
   $tabMain.Header       = $t.tabMain
+  if ($tabAzure) { $tabAzure.Header = $t.tabAzure }
   $tabSettings.Header   = $t.tabSettings
   $gbCreds.Header       = $t.gbCreds
   $gbAD.Header          = $t.gbAD
   $gbSearch.Header      = $t.gbSearch
   $gbDetails.Header     = $t.gbDetails
   $gbPwd.Header         = $t.gbPwd
+  if ($gbAzureAuth) { $gbAzureAuth.Header = $t.gbAzureAuth }
+  if ($gbAzureSearch) { $gbAzureSearch.Header = $t.gbSearch }
+  if ($gbAzureDevices) { $gbAzureDevices.Header = $t.gbAzureDevices }
+  if ($gbAzureDetails) { $gbAzureDetails.Header = $t.gbDetails }
+  if ($gbAzurePwd) { $gbAzurePwd.Header = $t.gbPwd }
   $lblUser.Text         = $t.lblUser
   $lblPass.Text         = $t.lblPass
   $lblController.Text   = $t.lblController
   $lblCompName.Text     = $t.lblCompName
+  if ($lblAzureDeviceName) { $lblAzureDeviceName.Text = $t.lblCompName }
   $btnGet.Content       = $t.btnGet
   $btnRetry.Content     = $t.btnRetry
   $btnUpdate.Content    = $t.btnUpdate
   $btnIgnore.Content    = $t.btnIgnore
   $cbShow.Content       = $t.cbShow
   $btnCopy.Content      = $t.btnCopy
+  if ($btnAzureSearch) { $btnAzureSearch.Content = $t.btnGet }
+  if ($btnAzureCopy) { $btnAzureCopy.Content = $t.btnCopy }
+  if ($cbAzureShow) { $cbAzureShow.Content = $t.cbShow }
+  if ($btnAzureSignIn) { $btnAzureSignIn.Content = $t.btnAzureSignIn }
+  if ($btnAzureSignOut) { $btnAzureSignOut.Content = $t.btnAzureSignOut }
   $gbSecurity.Header    = $t.gbSecurity
   $cbLdaps.Content      = $t.cbLdaps
   $cbClipboardAutoClear.Content = $t.cbClipboardAutoClear
@@ -1304,6 +1494,8 @@ function Apply-Language {
     }
   }
   $btnHistory.ToolTip   = $t.btnHistory_ToolTip
+  if ($btnAzureHistory) { $btnAzureHistory.ToolTip = $t.btnHistory_ToolTip }
+  Update-AzureStatusLabel
   if ($btnUpdate.Visibility -eq 'Visible' -and $script:LastUpdateInfo) {
     $btnUpdate.Content = $t.btnUpdateTo -f $script:LastUpdateInfo.Version
     $lblUpdateStatus.Text = $t.msgUpdateAvailable -f $script:LastUpdateInfo.Version
@@ -1314,11 +1506,17 @@ function Apply-Language {
 
 # Controls
 $tabMain       = $window.FindName("tabMain")
+$tabAzure      = $window.FindName("tabAzure")
 $tabSettings   = $window.FindName("tabSettings")
 $gbCreds       = $window.FindName("gbCreds")
 $gbAD          = $window.FindName("gbAD")
 $gbSearch      = $window.FindName("gbSearch")
 $gbPwd         = $window.FindName("gbPwd")
+$gbAzureAuth   = $window.FindName("gbAzureAuth")
+$gbAzureSearch = $window.FindName("gbAzureSearch")
+$gbAzureDevices= $window.FindName("gbAzureDevices")
+$gbAzureDetails= $window.FindName("gbAzureDetails")
+$gbAzurePwd    = $window.FindName("gbAzurePwd")
 $gbSecurity    = $window.FindName("gbSecurity")
 $gbPrefs       = $window.FindName("gbPrefs")
 $gbAppearance  = $window.FindName("gbAppearance")
@@ -1326,6 +1524,8 @@ $lblUser       = $window.FindName("lblUser")
 $lblPass       = $window.FindName("lblPass")
 $lblController = $window.FindName("lblController")
 $lblCompName   = $window.FindName("lblCompName")
+$lblAzureDeviceName = $window.FindName("lblAzureDeviceName")
+$lblAzureStatus = $window.FindName("lblAzureStatus")
 $lblClipboardDelay = $window.FindName("lblClipboardDelay")
 $lblTheme      = $window.FindName("lblTheme")
 $lblLanguage   = $window.FindName("lblLanguage")
@@ -1339,11 +1539,28 @@ $lbCompSuggest  = $window.FindName("lbCompSuggest")
 $btnHistory     = $window.FindName("btnHistory")
 $btnGet         = $window.FindName("btnGet")
 $btnRetry       = $window.FindName("btnRetry")
+$tbAzureDevice  = $window.FindName("tbAzureDevice")
+$btnAzureHistory= $window.FindName("btnAzureHistory")
+$popAzureDevice = $window.FindName("popAzureDevice")
+$lbAzureDeviceHistory = $window.FindName("lbAzureDeviceHistory")
+$btnAzureSearch = $window.FindName("btnAzureSearch")
+$lbAzureDevices = $window.FindName("lbAzureDevices")
 $gbDetails      = $window.FindName("gbDetails")
 $txtDetails     = $window.FindName("txtDetails")
 $spExpire       = $window.FindName("spExpire")
 $ellExpire      = $window.FindName("ellExpire")
 $lblExpire      = $window.FindName("lblExpire")
+$txtAzureDetails= $window.FindName("txtAzureDetails")
+$spAzureExpire  = $window.FindName("spAzureExpire")
+$ellAzureExpire = $window.FindName("ellAzureExpire")
+$lblAzureExpire = $window.FindName("lblAzureExpire")
+$rtbAzurePwd    = $window.FindName("rtbAzurePwd")
+$pbAzurePwd     = $window.FindName("pbAzurePwd")
+$cbAzureShow    = $window.FindName("cbAzureShow")
+$btnAzureCopy   = $window.FindName("btnAzureCopy")
+$lblAzureCountdown = $window.FindName("lblAzureCountdown")
+$btnAzureSignIn = $window.FindName("btnAzureSignIn")
+$btnAzureSignOut= $window.FindName("btnAzureSignOut")
 $rtbPwdOut      = $window.FindName("rtbPwdOut")   # NEW
 $pbPwdOut       = $window.FindName("pbPwdOut")
 $cbShow         = $window.FindName("cbShow")
@@ -1367,8 +1584,17 @@ $cbLdaps.IsChecked = $UseLdaps
 $script:UseLdaps   = [bool]$cbLdaps.IsChecked
 $script:LastUpdateInfo = $null
 $tbClipboardSecs.Text = $script:ClipboardAutoClearSeconds
-$script:CurrentLapsPassword = ""
-$script:DoneTimer = $null
+$script:AdState = New-LapsUiState -Name 'AD' -PasswordBox $pbPwdOut -RichTextBox $rtbPwdOut -ShowCheckBox $cbShow -CopyButton $btnCopy -CountdownLabel $lblCountdown -ExpirePanel $spExpire -ExpireEllipse $ellExpire -ExpireLabel $lblExpire
+$script:AzureState = New-LapsUiState -Name 'Azure' -PasswordBox $pbAzurePwd -RichTextBox $rtbAzurePwd -ShowCheckBox $cbAzureShow -CopyButton $btnAzureCopy -CountdownLabel $lblAzureCountdown -ExpirePanel $spAzureExpire -ExpireEllipse $ellAzureExpire -ExpireLabel $lblAzureExpire
+$script:AzureState | Add-Member -NotePropertyName IsConnected -NotePropertyValue $false
+$script:AzureState | Add-Member -NotePropertyName Account -NotePropertyValue $null
+$script:AzureState | Add-Member -NotePropertyName TenantId -NotePropertyValue $null
+$script:AzureState | Add-Member -NotePropertyName DeviceResults -NotePropertyValue @()
+$script:AzureState | Add-Member -NotePropertyName IsConnecting -NotePropertyValue $false
+Refresh-LapsDisplay $script:AdState
+Refresh-LapsDisplay $script:AzureState
+if ($script:AdState.CopyButton) { $script:AdState.CopyButton.IsEnabled = $false }
+if ($script:AzureState.CopyButton) { $script:AzureState.CopyButton.IsEnabled = $false }
 
 # --- Prefs (unchanged from your version) ---
 $PrefDir  = Join-Path $env:LOCALAPPDATA 'LAPS-UI'
@@ -1395,7 +1621,8 @@ function Save-Prefs {
   if ([int]::TryParse($tbClipboardSecs.Text, [ref]$secs) -and $secs -gt 0) {
     $script:ClipboardAutoClearSeconds = $secs
   }
-  $history = $script:Prefs.History
+  $adHistory = $script:Prefs.AdHistory
+  $azureHistory = $script:Prefs.AzureHistory
   $ignore  = $script:Prefs.IgnoreVersion
   $script:Prefs = @{
     RememberUser        = [bool]$cbRememberUser.IsChecked
@@ -1409,11 +1636,13 @@ function Save-Prefs {
     ConfirmCopy         = [bool]$cbConfirmCopy.IsChecked
     Theme               = $cmbTheme.SelectedItem.Tag
     Language            = $cmbLanguage.SelectedItem.Tag
-    History             = $history
+    AdHistory           = $adHistory
+    AzureHistory        = $azureHistory
     IgnoreVersion       = $ignore
   }
   $persist = $script:Prefs.Clone()
-  $persist.History = @($history | ForEach-Object { Protect-String $_ })
+  $persist.AdHistory = @($adHistory | ForEach-Object { Protect-String $_ })
+  $persist.AzureHistory = @($azureHistory | ForEach-Object { Protect-String $_ })
   ($persist | ConvertTo-Json -Compress) | Set-Content -Path $PrefFile -Encoding UTF8
 }
 function Load-Prefs {
@@ -1430,18 +1659,28 @@ function Load-Prefs {
       if ($null -ne $loaded.ConfirmCopy) { $cbConfirmCopy.IsChecked = [bool]$loaded.ConfirmCopy }
       if ($loaded.Theme) { $cmbTheme.SelectedItem = $cmbTheme.Items | Where-Object { $_.Tag -eq $loaded.Theme } }
       if ($loaded.Language) { $cmbLanguage.SelectedItem = $cmbLanguage.Items | Where-Object { $_.Tag -eq $loaded.Language } }
-      $hist = @()
-      if ($loaded.History -is [System.Collections.IEnumerable]) {
-        foreach ($enc in $loaded.History) {
+      $adHist = @()
+      $rawAd = if ($loaded.PSObject.Properties.Name -contains 'AdHistory') { $loaded.AdHistory } else { $loaded.History }
+      if ($rawAd -is [System.Collections.IEnumerable]) {
+        foreach ($enc in $rawAd) {
           $dec = Unprotect-String $enc
-          if ($dec) { $hist += $dec }
+          if ($dec) { $adHist += $dec }
+        }
+      }
+      $azureHist = @()
+      if ($loaded.AzureHistory -is [System.Collections.IEnumerable]) {
+        foreach ($enc in $loaded.AzureHistory) {
+          $dec = Unprotect-String $enc
+          if ($dec) { $azureHist += $dec }
         }
       }
       $script:Prefs = $loaded
-      $script:Prefs.History = $hist
+      $script:Prefs.AdHistory = $adHist
+      $script:Prefs.AzureHistory = $azureHist
     } catch { $script:Prefs = @{} }
   }
-  if (-not $script:Prefs.History) { $script:Prefs.History = @() }
+  if (-not $script:Prefs.AdHistory) { $script:Prefs.AdHistory = @() }
+  if (-not $script:Prefs.AzureHistory) { $script:Prefs.AzureHistory = @() }
   $tbClipboardSecs.Text = $script:ClipboardAutoClearSeconds
   $script:UseLdaps = [bool]$cbLdaps.IsChecked
 }
@@ -1491,11 +1730,8 @@ $tbComp.Add_TextChanged({
         $gbDetails.Visibility = 'Collapsed'
     }
     $txtDetails.Text = ""
-    $script:CurrentLapsPassword = ""
-    $pbPwdOut.Password = ""
-    $rtbPwdOut.Document.Blocks.Clear()
-    $btnCopy.IsEnabled = $false
-    Update-ExpirationIndicator $null
+    Clear-LapsPassword $script:AdState
+    Update-ExpirationIndicator $script:AdState $null
     $window.UpdateLayout()
 })
 $lbCompSuggest.Add_MouseLeftButtonUp({
@@ -1517,8 +1753,8 @@ $lbCompSuggest.Add_KeyDown({
 })
 
 $btnHistory.Add_Click({
-    if ($script:Prefs.History -and $script:Prefs.History.Count -gt 0) {
-        $lbCompSuggest.ItemsSource = $script:Prefs.History
+    if ($script:Prefs.AdHistory -and $script:Prefs.AdHistory.Count -gt 0) {
+        $lbCompSuggest.ItemsSource = $script:Prefs.AdHistory
         $lbCompSuggest.SelectedIndex = 0
         $popCompSuggest.IsOpen = $true
         $lbCompSuggest.Focus()
@@ -1533,42 +1769,227 @@ $BrushLetters  = $bc.ConvertFromString("#C5E1A5")   # light green
 $BrushSymbols  = $bc.ConvertFromString("#FFB74D")   # orange
 $BrushDefault  = $bc.ConvertFromString("#EEEEEE")
 
-function Update-PasswordDisplay([string]$pwd) {
-  # Build a single-line FlowDocument with per-char coloring
+function New-LapsUiState {
+  param(
+    [string]$Name,
+    [System.Windows.Controls.PasswordBox]$PasswordBox,
+    [System.Windows.Controls.RichTextBox]$RichTextBox,
+    [System.Windows.Controls.CheckBox]$ShowCheckBox,
+    [System.Windows.Controls.Button]$CopyButton,
+    [System.Windows.Controls.TextBlock]$CountdownLabel,
+    [System.Windows.Controls.StackPanel]$ExpirePanel,
+    [System.Windows.Shapes.Ellipse]$ExpireEllipse,
+    [System.Windows.Controls.TextBlock]$ExpireLabel)
+
+  $state = [pscustomobject]@{
+    Name               = $Name
+    CurrentPassword    = ""
+    ClipboardSnapshot  = ""
+    PasswordBox        = $PasswordBox
+    RichTextBox        = $RichTextBox
+    ShowCheckBox       = $ShowCheckBox
+    CopyButton         = $CopyButton
+    CountdownLabel     = $CountdownLabel
+    CountdownRemaining = 0
+    Timer              = New-Object System.Windows.Threading.DispatcherTimer
+    DoneTimer          = $null
+    ExpirePanel        = $ExpirePanel
+    ExpireEllipse      = $ExpireEllipse
+    ExpireLabel        = $ExpireLabel
+  }
+  $state.Timer.Interval = [TimeSpan]::FromSeconds(1)
+  $state.Timer.Tag = $state
+  $state.Timer.Add_Tick({
+    param($sender,$eventArgs)
+    $st = $sender.Tag
+    if (-not $st) { return }
+    if ($st.CountdownRemaining -gt 0) {
+      $st.CountdownRemaining--
+      if ($st.CountdownLabel) {
+        $st.CountdownLabel.Text = "Clipboard cleared in $($st.CountdownRemaining)s"
+      }
+      if ($st.CountdownRemaining -le 0) {
+        try {
+          if ([System.Windows.Clipboard]::ContainsText()) {
+            $txt = [System.Windows.Clipboard]::GetText()
+            if ($txt -and $txt -eq $st.ClipboardSnapshot) {
+              [System.Windows.Clipboard]::Clear()
+            }
+          }
+        } catch {}
+        $sender.Stop()
+        if ($st.CountdownLabel) {
+          $st.CountdownLabel.Text = 'Clipboard cleared'
+          $st.CountdownLabel.Foreground = 'LimeGreen'
+        }
+        if ($st.DoneTimer) { $st.DoneTimer.Stop(); $st.DoneTimer = $null }
+        $st.DoneTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $st.DoneTimer.Interval = [TimeSpan]::FromSeconds(2)
+        $st.DoneTimer.Tag = $st
+        $st.DoneTimer.Add_Tick({
+          param($s,$e)
+          $stateRef = $s.Tag
+          $s.Stop()
+          if ($stateRef -and $stateRef.CountdownLabel) {
+            $stateRef.CountdownLabel.Visibility = 'Collapsed'
+            $stateRef.CountdownLabel.Foreground = '#FFA07A'
+          }
+          if ($stateRef) {
+            $stateRef.DoneTimer = $null
+          }
+        })
+        $st.DoneTimer.Start()
+      }
+    } else {
+      $sender.Stop()
+      if ($st.CountdownLabel) {
+        $st.CountdownLabel.Visibility = 'Collapsed'
+      }
+    }
+  })
+  $state
+}
+
+function Update-LapsPasswordDisplay {
+  param([pscustomobject]$State,[string]$Password)
+  if (-not $State -or -not $State.RichTextBox) { return }
+  $pwd = if ($Password) { [string]$Password } else { "" }
   $doc = New-Object System.Windows.Documents.FlowDocument
   $doc.PagePadding = [Windows.Thickness]::new(0)
   $p = New-Object System.Windows.Documents.Paragraph
   $p.Margin = [Windows.Thickness]::new(0)
   $p.LineHeight = 28
-
-  foreach ($ch in $pwd.ToCharArray()) {
-    $run = New-Object System.Windows.Documents.Run ($ch)
-    switch -regex ($ch) {
-      '^[0-9]$'        { $run.Foreground = $BrushDigits;  break }
-      '^[A-Za-z]$'     { $run.Foreground = $BrushLetters; break }
-      default          { $run.Foreground = $BrushSymbols; break }
+  if ($pwd.Length -gt 0) {
+    foreach ($ch in $pwd.ToCharArray()) {
+      $run = New-Object System.Windows.Documents.Run ($ch)
+      switch -regex ($ch) {
+        '^[0-9]$'        { $run.Foreground = $BrushDigits;  break }
+        '^[A-Za-z]$'     { $run.Foreground = $BrushLetters; break }
+        default          { $run.Foreground = $BrushSymbols; break }
+      }
+      $p.Inlines.Add($run) | Out-Null
     }
-    $p.Inlines.Add($run) | Out-Null
   }
-
   $doc.Blocks.Clear()
-  $doc.Blocks.Add($p) | Out-Null
-  $rtbPwdOut.Document = $doc
+  if ($pwd.Length -gt 0) {
+    $doc.Blocks.Add($p) | Out-Null
+  }
+  $State.RichTextBox.Document = $doc
 }
 
-function Update-ExpirationIndicator([nullable[DateTime]]$exp) {
-  if ($null -eq $exp) { $spExpire.Visibility = 'Collapsed'; return }
-  $now = Get-Date
-  $spExpire.Visibility = 'Visible'
-  if ($exp -lt $now) {
-    $ellExpire.Fill = 'Red'
-    $lblExpire.Text = "Expired on $exp"
-  } elseif (($exp - $now).TotalDays -le 2) {
-    $ellExpire.Fill = 'Orange'
-    $lblExpire.Text = "Expires soon ($exp)"
+function Refresh-LapsDisplay {
+  param([pscustomobject]$State)
+  if (-not $State) { return }
+  $pwd = if ($State.CurrentPassword) { $State.CurrentPassword } else { "" }
+  if ($State.PasswordBox) { $State.PasswordBox.Password = $pwd }
+  if ($State.ShowCheckBox -and $State.ShowCheckBox.IsChecked) {
+    Update-LapsPasswordDisplay $State $pwd
+    if ($State.RichTextBox) { $State.RichTextBox.Visibility = 'Visible' }
+    if ($State.PasswordBox) { $State.PasswordBox.Visibility = 'Collapsed' }
   } else {
-    $ellExpire.Fill = 'LimeGreen'
-    $lblExpire.Text = "Expires on $exp"
+    if ($State.PasswordBox) { $State.PasswordBox.Visibility = 'Visible' }
+    if ($State.RichTextBox) { $State.RichTextBox.Visibility = 'Collapsed' }
+  }
+}
+
+function Set-LapsPassword {
+  param([pscustomobject]$State,[string]$Password)
+  if (-not $State) { return }
+  $State.CurrentPassword = if ($Password) { [string]$Password } else { "" }
+  Refresh-LapsDisplay $State
+  if ($State.CopyButton) {
+    $State.CopyButton.IsEnabled = -not [string]::IsNullOrWhiteSpace($State.CurrentPassword)
+  }
+}
+
+function Clear-LapsPassword {
+  param([pscustomobject]$State)
+  if (-not $State) { return }
+  $State.CurrentPassword = ""
+  if ($State.PasswordBox) { $State.PasswordBox.Password = "" }
+  if ($State.RichTextBox) { $State.RichTextBox.Document.Blocks.Clear() }
+  Refresh-LapsDisplay $State
+  if ($State.CopyButton) { $State.CopyButton.IsEnabled = $false }
+  Stop-LapsCountdown $State
+}
+
+function Stop-LapsCountdown {
+  param([pscustomobject]$State)
+  if (-not $State) { return }
+  if ($State.Timer) { $State.Timer.Stop() }
+  if ($State.DoneTimer) { $State.DoneTimer.Stop(); $State.DoneTimer = $null }
+  $State.CountdownRemaining = 0
+  $State.ClipboardSnapshot = ""
+  if ($State.CountdownLabel) {
+    $State.CountdownLabel.Visibility = 'Collapsed'
+    $State.CountdownLabel.Foreground = '#FFA07A'
+    $State.CountdownLabel.Text = ""
+  }
+}
+
+function Copy-LapsPassword {
+  param([pscustomobject]$State)
+  if (-not $State) { return }
+  $pwd = $State.CurrentPassword
+  if ([string]::IsNullOrWhiteSpace($pwd)) { return }
+  if ($cbConfirmCopy.IsChecked) {
+    $res = [System.Windows.MessageBox]::Show("Copy password to clipboard?","Confirm",'YesNo','Question')
+    if ($res -ne 'Yes') { return }
+  }
+  $usedWinRT = $false
+  try {
+    $winRtSupported = [Windows.Foundation.Metadata.ApiInformation]::IsMethodPresent(
+      "Windows.ApplicationModel.DataTransfer.Clipboard", "SetContentWithOptions")
+    if ($winRtSupported) {
+      $dp = New-Object Windows.ApplicationModel.DataTransfer.DataPackage
+      $dp.RequestedOperation = [Windows.ApplicationModel.DataTransfer.DataPackageOperation]::Copy
+      $dp.SetText($pwd)
+      $opt = New-Object Windows.ApplicationModel.DataTransfer.ClipboardContentOptions
+      $opt.IsAllowedInHistory = $false; $opt.IsRoamingEnabled = $false
+      [Windows.ApplicationModel.DataTransfer.Clipboard]::SetContentWithOptions($dp,$opt)
+      [Windows.ApplicationModel.DataTransfer.Clipboard]::Flush()
+      $usedWinRT = $true
+    }
+  } catch {}
+  if (-not $usedWinRT) { [System.Windows.Clipboard]::SetText($pwd) }
+
+  [System.Windows.MessageBox]::Show(("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
+    "Copied",'OK','Information') | Out-Null
+
+  if ($cbClipboardAutoClear.IsChecked) {
+    Stop-LapsCountdown $State
+    $State.ClipboardSnapshot = $pwd
+    $State.CountdownRemaining = $script:ClipboardAutoClearSeconds
+    if ($State.CountdownLabel) {
+      $State.CountdownLabel.Text = "Clipboard cleared in $($State.CountdownRemaining)s"
+      $State.CountdownLabel.Foreground = '#FFA07A'
+      $State.CountdownLabel.Visibility = 'Visible'
+    }
+    if ($State.Timer) { $State.Timer.Stop(); $State.Timer.Start() }
+  } else {
+    Stop-LapsCountdown $State
+  }
+}
+
+function Update-ExpirationIndicator {
+  param([pscustomobject]$State,[nullable[DateTime]]$Expiration)
+  if (-not $State -or -not $State.ExpirePanel) { return }
+  if ($null -eq $Expiration) {
+    $State.ExpirePanel.Visibility = 'Collapsed'
+    if ($State.ExpireLabel) { $State.ExpireLabel.Text = '' }
+    return
+  }
+  $now = Get-Date
+  $State.ExpirePanel.Visibility = 'Visible'
+  if ($Expiration -lt $now) {
+    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'Red' }
+    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expired on $Expiration" }
+  } elseif (($Expiration - $now).TotalDays -le 2) {
+    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'Orange' }
+    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expires soon ($Expiration)" }
+  } else {
+    if ($State.ExpireEllipse) { $State.ExpireEllipse.Fill = 'LimeGreen' }
+    if ($State.ExpireLabel) { $State.ExpireLabel.Text = "Expires on $Expiration" }
   }
 }
 
@@ -1588,76 +2009,319 @@ function Reset-FailedAuthCount {
 }
 
 # Show/Hide clear text
-$cbShow.Add_Checked({
-  Update-PasswordDisplay $script:CurrentLapsPassword
-  $rtbPwdOut.Visibility = 'Visible'
-  $pbPwdOut.Visibility  = 'Collapsed'
-})
-$cbShow.Add_Unchecked({
-  $pbPwdOut.Password = $script:CurrentLapsPassword
-  $pbPwdOut.Visibility  = 'Visible'
-  $rtbPwdOut.Visibility = 'Collapsed'
-})
+if ($cbShow) {
+  $cbShow.Tag = $script:AdState
+  $cbShow.Add_Checked({ param($sender,$e) Refresh-LapsDisplay $sender.Tag })
+  $cbShow.Add_Unchecked({ param($sender,$e) Refresh-LapsDisplay $sender.Tag })
+}
+if ($cbAzureShow) {
+  $cbAzureShow.Tag = $script:AzureState
+  $cbAzureShow.Add_Checked({ param($sender,$e) Refresh-LapsDisplay $sender.Tag })
+  $cbAzureShow.Add_Unchecked({ param($sender,$e) Refresh-LapsDisplay $sender.Tag })
+}
 
-# ---------- Countdown & copy ----------
-$script:CountdownRemaining = 0
-$timer = New-Object System.Windows.Threading.DispatcherTimer
-$timer.Interval = [TimeSpan]::FromSeconds(1)
-$timer.Add_Tick({
-  if ($script:CountdownRemaining -gt 0) {
-    $script:CountdownRemaining--
-    $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
-    if ($script:CountdownRemaining -le 0) {
-      try { if ([System.Windows.Clipboard]::ContainsText()) {
-        $txt = [System.Windows.Clipboard]::GetText()
-        if ($txt -and $txt -eq $script:CurrentLapsPassword) { [System.Windows.Clipboard]::Clear() } } } catch {}
-      $timer.Stop()
-      $lblCountdown.Text = "Clipboard cleared"
-      $lblCountdown.Foreground = 'LimeGreen'
-      $script:DoneTimer = New-Object System.Windows.Threading.DispatcherTimer
-      $script:DoneTimer.Interval = [TimeSpan]::FromSeconds(2)
-      $script:DoneTimer.Add_Tick({ param($sender,$e) $sender.Stop(); $lblCountdown.Visibility='Collapsed'; $lblCountdown.Foreground='#FFA07A' })
-      $script:DoneTimer.Start()
-    }
-  } else { $timer.Stop(); $lblCountdown.Visibility = 'Collapsed' }
-})
+# ---------- Copy handlers ----------
+if ($btnCopy) {
+  $btnCopy.Tag = $script:AdState
+  $btnCopy.Add_Click({ param($sender,$e) Copy-LapsPassword $sender.Tag })
+}
+if ($btnAzureCopy) {
+  $btnAzureCopy.Tag = $script:AzureState
+  $btnAzureCopy.Add_Click({ param($sender,$e) Copy-LapsPassword $sender.Tag })
+}
 
-$btnCopy.Add_Click({
-  if ([string]::IsNullOrWhiteSpace($script:CurrentLapsPassword)) { return }
-  if ($cbConfirmCopy.IsChecked) {
-    $res = [System.Windows.MessageBox]::Show("Copy password to clipboard?","Confirm",'YesNo','Question')
-    if ($res -ne 'Yes') { return }
-  }
-  $usedWinRT = $false
-  try {
-    $winRtSupported = [Windows.Foundation.Metadata.ApiInformation]::IsMethodPresent(
-      "Windows.ApplicationModel.DataTransfer.Clipboard", "SetContentWithOptions")
-    if ($winRtSupported) {
-      $dp = New-Object Windows.ApplicationModel.DataTransfer.DataPackage
-      $dp.RequestedOperation = [Windows.ApplicationModel.DataTransfer.DataPackageOperation]::Copy
-      $dp.SetText($script:CurrentLapsPassword)
-      $opt = New-Object Windows.ApplicationModel.DataTransfer.ClipboardContentOptions
-      $opt.IsAllowedInHistory = $false; $opt.IsRoamingEnabled = $false
-      [Windows.ApplicationModel.DataTransfer.Clipboard]::SetContentWithOptions($dp,$opt)
-      [Windows.ApplicationModel.DataTransfer.Clipboard]::Flush()
-      $usedWinRT = $true
-    }
-  } catch {}
-  if (-not $usedWinRT) { [System.Windows.Clipboard]::SetText($script:CurrentLapsPassword) }
-
-  [System.Windows.MessageBox]::Show(("Password copied {0} clipboard history." -f ($(if($usedWinRT){'without entering'}else{'into'}))),
-    "Copied",'OK','Information') | Out-Null
-
-  if ($cbClipboardAutoClear.IsChecked) {
-    $script:CountdownRemaining = $script:ClipboardAutoClearSeconds
-    $lblCountdown.Text = "Clipboard cleared in $($script:CountdownRemaining)s"
-    $lblCountdown.Foreground = '#FFA07A'
-    $lblCountdown.Visibility = 'Visible'
-    $timer.Stop(); $timer.Start()
+# ---------- Azure helpers ----------
+function Update-AzureStatusLabel {
+  if (-not $lblAzureStatus -or -not $script:t) { return }
+  $connected = ($script:AzureState -and $script:AzureState.IsConnected)
+  if ($connected) {
+    $acct = $script:AzureState.Account
+    if ([string]::IsNullOrWhiteSpace($acct)) { $acct = '' }
+    $lblAzureStatus.Text = $script:t.lblAzureStatusSignedIn -f $acct
+    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Collapsed' }
+    if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Visible'; $btnAzureSignOut.IsEnabled = $true }
   } else {
-    $lblCountdown.Visibility = 'Collapsed'
+    $lblAzureStatus.Text = $script:t.lblAzureStatusSignedOut
+    if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible'; $btnAzureSignIn.IsEnabled = -not ($script:AzureState -and $script:AzureState.IsConnecting) }
+    if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Collapsed' }
   }
-})
+  if ($btnAzureSignIn -and $script:AzureState -and $script:AzureState.IsConnecting) {
+    $btnAzureSignIn.IsEnabled = $false
+  }
+}
+
+# Azure events
+if ($btnAzureSignIn) {
+  $btnAzureSignIn.Add_Click({
+    try {
+      if ($script:AzureState) { $script:AzureState.IsConnecting = $true }
+      Update-AzureStatusLabel
+      $window.Cursor = 'Wait'
+      Connect-IntuneGraph -Scopes @('DeviceManagementManagedDevices.Read.All') | Out-Null
+    } catch {
+      $msg = $_.Exception.Message
+      if ($msg -eq 'GraphModuleMissing') { $msg = $script:t.msgAzureInstallModule }
+      [System.Windows.MessageBox]::Show("Graph sign-in failed: $msg", 'Microsoft Graph', 'OK', 'Error') | Out-Null
+      if ($script:AzureState) { $script:AzureState.IsConnected = $false }
+    } finally {
+      $window.Cursor = 'Arrow'
+      if ($script:AzureState) { $script:AzureState.IsConnecting = $false }
+      Update-AzureStatusLabel
+    }
+  })
+}
+
+if ($btnAzureSignOut) {
+  $btnAzureSignOut.Add_Click({
+    Disconnect-IntuneGraph
+    Clear-LapsPassword $script:AzureState
+    Update-ExpirationIndicator $script:AzureState $null
+    if ($txtAzureDetails) { $txtAzureDetails.Text = '' }
+    if ($gbAzureDetails) { $gbAzureDetails.Visibility = 'Collapsed' }
+    if ($gbAzureDevices) { $gbAzureDevices.Visibility = 'Collapsed' }
+    if ($lbAzureDevices) { $lbAzureDevices.ItemsSource = @() }
+    if ($script:AzureState) { $script:AzureState.DeviceResults = @() }
+    if ($popAzureDevice) { $popAzureDevice.IsOpen = $false }
+  })
+}
+
+if ($tbAzureDevice) {
+  $tbAzureDevice.Add_TextChanged({
+    if ($gbAzureDetails) { $gbAzureDetails.Visibility = 'Collapsed' }
+    if ($gbAzureDevices) { $gbAzureDevices.Visibility = 'Collapsed' }
+    if ($txtAzureDetails) { $txtAzureDetails.Text = '' }
+    Clear-LapsPassword $script:AzureState
+    Update-ExpirationIndicator $script:AzureState $null
+    if ($popAzureDevice) { $popAzureDevice.IsOpen = $false }
+    if ($script:AzureState) { $script:AzureState.DeviceResults = @() }
+  })
+  $tbAzureDevice.Add_KeyDown({
+    if ($_.Key -eq 'Return') {
+      if ($btnAzureSearch) {
+        $btnAzureSearch.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+      }
+    } elseif ($_.Key -eq 'Down' -and $popAzureDevice -and $popAzureDevice.IsOpen -and $lbAzureDeviceHistory -and $lbAzureDeviceHistory.Items.Count -gt 0) {
+      $lbAzureDeviceHistory.Focus()
+      if ($lbAzureDeviceHistory.SelectedIndex -lt 0) { $lbAzureDeviceHistory.SelectedIndex = 0 }
+    } elseif ($_.Key -eq 'Escape') {
+      if ($popAzureDevice) { $popAzureDevice.IsOpen = $false }
+    }
+  })
+}
+
+if ($btnAzureHistory) {
+  $btnAzureHistory.Add_Click({
+    if ($script:Prefs.AzureHistory -and $script:Prefs.AzureHistory.Count -gt 0) {
+      $lbAzureDeviceHistory.ItemsSource = $script:Prefs.AzureHistory
+      $lbAzureDeviceHistory.SelectedIndex = 0
+      $popAzureDevice.IsOpen = $true
+      $lbAzureDeviceHistory.Focus()
+    }
+  })
+}
+
+if ($lbAzureDeviceHistory) {
+  $lbAzureDeviceHistory.Add_MouseLeftButtonUp({
+    if ($lbAzureDeviceHistory.SelectedItem) {
+      $tbAzureDevice.Text = $lbAzureDeviceHistory.SelectedItem
+      $popAzureDevice.IsOpen = $false
+      $tbAzureDevice.Focus(); $tbAzureDevice.CaretIndex = $tbAzureDevice.Text.Length
+    }
+  })
+  $lbAzureDeviceHistory.Add_KeyDown({
+    if ($_.Key -eq 'Return' -and $lbAzureDeviceHistory.SelectedItem) {
+      $tbAzureDevice.Text = $lbAzureDeviceHistory.SelectedItem
+      $popAzureDevice.IsOpen = $false
+      $tbAzureDevice.Focus(); $tbAzureDevice.CaretIndex = $tbAzureDevice.Text.Length
+    } elseif ($_.Key -eq 'Escape') {
+      $popAzureDevice.IsOpen = $false
+      $tbAzureDevice.Focus()
+    }
+  })
+}
+
+if ($btnAzureSearch) {
+  $btnAzureSearch.Add_Click({
+    $popAzureDevice.IsOpen = $false
+    Clear-LapsPassword $script:AzureState
+    Update-ExpirationIndicator $script:AzureState $null
+    if ($txtAzureDetails) { $txtAzureDetails.Text = '' }
+    if ($gbAzureDetails) { $gbAzureDetails.Visibility = 'Collapsed' }
+    if ($gbAzureDevices) { $gbAzureDevices.Visibility = 'Collapsed' }
+    if ($lbAzureDevices) { $lbAzureDevices.ItemsSource = @() }
+    if ($script:AzureState) { $script:AzureState.DeviceResults = @() }
+    $deviceName = if ($tbAzureDevice) { $tbAzureDevice.Text.Trim() } else { '' }
+    if (-not ($script:AzureState -and $script:AzureState.IsConnected)) {
+      [System.Windows.MessageBox]::Show($script:t.msgAzureConnectFirst, 'Microsoft Graph', 'OK', 'Warning') | Out-Null
+      return
+    }
+    if ([string]::IsNullOrWhiteSpace($deviceName)) { return }
+    try {
+      $window.Cursor = 'Wait'
+      if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $false }
+      $devices = Search-IntuneDevices -DeviceName $deviceName
+      if (-not $devices -or $devices.Count -eq 0) {
+        [System.Windows.MessageBox]::Show($script:t.msgAzureNoDevices, 'Intune', 'OK', 'Information') | Out-Null
+        return
+      }
+      $norm = Normalize-ComputerName -InputName $deviceName
+      if ($norm) {
+        if (-not $script:Prefs.AzureHistory) { $script:Prefs.AzureHistory = @() }
+        $script:Prefs.AzureHistory = @($norm) + @($script:Prefs.AzureHistory | Where-Object { $_ -ne $norm })
+        if ($script:Prefs.AzureHistory.Count -gt 50) { $script:Prefs.AzureHistory = $script:Prefs.AzureHistory[0..49] }
+        Save-Prefs
+      }
+      $items = @()
+      foreach ($dev in $devices) {
+        $display = if ($dev.deviceName) { $dev.deviceName } else { $dev.id }
+        if ($dev.userPrincipalName) { $display = "$display ($($dev.userPrincipalName))" }
+        $items += [pscustomobject]@{ DisplayName = $display; Device = $dev }
+      }
+      $script:AzureState.DeviceResults = $items
+      if ($lbAzureDevices) { $lbAzureDevices.ItemsSource = $items }
+      if ($gbAzureDevices) { $gbAzureDevices.Visibility = 'Visible' }
+      if ($items.Count -gt 0) {
+        if ($items.Count -gt 1) {
+          if ($lbAzureDevices) { $lbAzureDevices.SelectedIndex = -1 }
+          if ($txtAzureDetails) { $txtAzureDetails.Text = $script:t.msgAzureMultipleDevices }
+          if ($gbAzureDetails) { $gbAzureDetails.Visibility = 'Visible' }
+          Clear-LapsPassword $script:AzureState
+          Update-ExpirationIndicator $script:AzureState $null
+        } else {
+          if ($lbAzureDevices) { $lbAzureDevices.SelectedIndex = 0 }
+          Show-AzureDeviceDetails $items[0]
+        }
+      }
+    } catch {
+      $msg = $_.Exception.Message
+      if ($msg -eq 'GraphModuleMissing') { $msg = $script:t.msgAzureInstallModule }
+      [System.Windows.MessageBox]::Show("Graph query failed: $msg", 'Microsoft Graph', 'OK', 'Error') | Out-Null
+    } finally {
+      $window.Cursor = 'Arrow'
+      if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $true }
+    }
+  })
+}
+
+if ($lbAzureDevices) {
+  $lbAzureDevices.Add_SelectionChanged({
+    if ($lbAzureDevices.SelectedItem) {
+      Show-AzureDeviceDetails $lbAzureDevices.SelectedItem
+    }
+  })
+}
+
+function Ensure-GraphModules {
+  if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
+    throw [System.Exception]::new('GraphModuleMissing')
+  }
+  Import-Module Microsoft.Graph.Authentication -ErrorAction Stop | Out-Null
+  try { Import-Module Microsoft.Graph.DeviceManagement -ErrorAction SilentlyContinue | Out-Null } catch {}
+}
+
+function Connect-IntuneGraph {
+  param([string[]]$Scopes)
+  Ensure-GraphModules
+  Connect-MgGraph -Scopes $Scopes -ContextScope Process -NoWelcome -ErrorAction Stop | Out-Null
+  $ctx = Get-MgContext
+  if (-not $ctx) { throw "Unable to obtain Microsoft Graph context." }
+  if ($script:AzureState) {
+    $script:AzureState.IsConnected = $true
+    $script:AzureState.Account = $ctx.Account
+    $script:AzureState.TenantId = $ctx.TenantId
+  }
+  Update-AzureStatusLabel
+  $ctx
+}
+
+function Disconnect-IntuneGraph {
+  try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch {}
+  if ($script:AzureState) {
+    $script:AzureState.IsConnected = $false
+    $script:AzureState.Account = $null
+    $script:AzureState.TenantId = $null
+  }
+  Update-AzureStatusLabel
+}
+
+function Search-IntuneDevices {
+  param([string]$DeviceName)
+  Ensure-GraphModules
+  $safe = if ($DeviceName) { $DeviceName.Replace("'","''") } else { "" }
+  $filters = @()
+  if ($safe) {
+    $filters += "deviceName eq '$safe'"
+    $filters += "startsWith(deviceName,'$safe')"
+  }
+  $results = @()
+  foreach ($filter in $filters) {
+    $encodedFilter = [uri]::EscapeDataString($filter)
+    $uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices?`$filter=$encodedFilter&`$top=25"
+    try {
+      $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+      if ($resp.value) { $results += $resp.value }
+    } catch {
+      throw $_
+    }
+  }
+  $unique = @{}
+  foreach ($dev in $results) {
+    if ($dev.id -and -not $unique.ContainsKey($dev.id)) {
+      $unique[$dev.id] = $dev
+    }
+  }
+  @($unique.Values)
+}
+
+function Get-IntuneLapsPassword {
+  param([string]$DeviceId)
+  if ([string]::IsNullOrWhiteSpace($DeviceId)) { return $null }
+  Ensure-GraphModules
+  $uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$DeviceId/windowsLapsManagedDeviceInformation"
+  $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+  $pwd = $resp.password
+  $exp = $null
+  if ($resp.passwordExpirationDateTime) {
+    try { $exp = ([DateTime]::Parse($resp.passwordExpirationDateTime)).ToLocalTime() } catch {}
+  }
+  [pscustomobject]@{
+    Password  = $pwd
+    Expiration= $exp
+    Account   = $resp.administratorAccountName
+    Raw       = $resp
+  }
+}
+
+function Show-AzureDeviceDetails {
+  param($Entry)
+  if (-not $Entry -or -not $Entry.Device) { return }
+  $device = $Entry.Device
+  $lines = @()
+  if ($device.deviceName) { $lines += ("Device   : {0}" -f $device.deviceName) }
+  if ($device.userPrincipalName) { $lines += ("User     : {0}" -f $device.userPrincipalName) }
+  if ($device.enrolledDateTime) { try { $lines += ("Enrolled : {0}" -f ([DateTime]$device.enrolledDateTime).ToLocalTime()) } catch {} }
+  if ($device.complianceState) { $lines += ("Compliance: {0}" -f $device.complianceState) }
+  if ($device.operatingSystem) { $lines += ("OS       : {0}" -f $device.operatingSystem) }
+  if ($device.id) { $lines += ("ID       : {0}" -f $device.id) }
+  $txtAzureDetails.Text = ($lines -join [Environment]::NewLine)
+  $gbAzureDetails.Visibility = 'Visible'
+  $window.UpdateLayout()
+  Clear-LapsPassword $script:AzureState
+  Update-ExpirationIndicator $script:AzureState $null
+  try {
+    $laps = Get-IntuneLapsPassword -DeviceId $device.id
+    if ($laps -and $laps.Password) {
+      Set-LapsPassword $script:AzureState $laps.Password
+      if ($laps.Account) { $txtAzureDetails.Text += "`nAccount  : $($laps.Account)" }
+      Update-ExpirationIndicator $script:AzureState $laps.Expiration
+    } else {
+      Update-ExpirationIndicator $script:AzureState $(if ($laps) { $laps.Expiration } else { $null })
+      $txtAzureDetails.Text += "`nNo LAPS password available."
+    }
+  } catch {
+    $txtAzureDetails.Text += "`nError: $($_.Exception.Message)"
+  }
+}
 
 # ---------- Retrieve ----------
 $updateInfo = $null
@@ -1675,11 +2339,8 @@ $btnGet.Add_Click({
     $popCompSuggest.IsOpen = $false
     $gbDetails.Visibility = 'Collapsed'
     $txtDetails.Text = ""
-    $btnCopy.IsEnabled = $false
-    $pbPwdOut.Password = ""
-    $rtbPwdOut.Document.Blocks.Clear()
-    $script:CurrentLapsPassword = ""
-    Update-ExpirationIndicator $null
+    Clear-LapsPassword $script:AdState
+    Update-ExpirationIndicator $script:AdState $null
     $window.UpdateLayout()
     $btnGet.IsEnabled = $false
     $window.Cursor = 'Wait'
@@ -1710,18 +2371,15 @@ $btnGet.Add_Click({
 
     $norm = Normalize-ComputerName -InputName $tbComp.Text
     if ($norm) {
-      if (-not $script:Prefs.History) { $script:Prefs.History = @() }
-      $script:Prefs.History = @($norm) + @($script:Prefs.History | Where-Object { $_ -ne $norm })
-      if ($script:Prefs.History.Count -gt 50) { $script:Prefs.History = $script:Prefs.History[0..49] }
+      if (-not $script:Prefs.AdHistory) { $script:Prefs.AdHistory = @() }
+      $script:Prefs.AdHistory = @($norm) + @($script:Prefs.AdHistory | Where-Object { $_ -ne $norm })
+      if ($script:Prefs.AdHistory.Count -gt 50) { $script:Prefs.AdHistory = $script:Prefs.AdHistory[0..49] }
       Save-Prefs
     }
 
     $item = Get-LapsPasswordFromEntry -Result $res
     if ($item -and $item.Password) {
-      $script:CurrentLapsPassword = [string]$item.Password
-      $pbPwdOut.Password = $script:CurrentLapsPassword
-      if ($cbShow.IsChecked) { Update-PasswordDisplay $script:CurrentLapsPassword }
-      $btnCopy.IsEnabled = $true
+      Set-LapsPassword $script:AdState $item.Password
 
       $lines = @()
       $lines += ("Type       : {0}" -f $item.Type)
@@ -1731,24 +2389,21 @@ $btnGet.Add_Click({
       $txtDetails.Text = ($lines -join [Environment]::NewLine)
       $gbDetails.Visibility = 'Visible'
       $window.UpdateLayout()
-      Update-ExpirationIndicator $item.Expires
+      Update-ExpirationIndicator $script:AdState $item.Expires
     } else {
       $dn = Get-FirstValue (Get-PropValueCI $res.Properties 'distinguishedName')
       $txtDetails.Text = "No readable LAPS attribute on this computer.`r`nDN: $dn`r`n- LAPS not applied`r`n- No read permission`r`n- Rotation not yet performed."
       $gbDetails.Visibility = 'Visible'
       $window.UpdateLayout()
-      $script:CurrentLapsPassword = ""
-      $pbPwdOut.Password = ""
-      if ($cbShow.IsChecked) { Update-PasswordDisplay "" }
-      $btnCopy.IsEnabled = $false
-      Update-ExpirationIndicator $null
+      Clear-LapsPassword $script:AdState
+      Update-ExpirationIndicator $script:AdState $null
     }
   } catch {
     $msg = $_.Exception.Message
     $txtDetails.Text = "Error: $msg"
     $gbDetails.Visibility = 'Visible'
     $window.UpdateLayout()
-    Update-ExpirationIndicator $null
+    Update-ExpirationIndicator $script:AdState $null
     if ($msg -eq 'Too many invalid credential attempts.') {
       if ($script:LockoutTimer) { $script:LockoutTimer.Stop(); $script:LockoutTimer.Dispose() }
       $script:LockoutTimer = New-Object System.Timers.Timer ($script:LockoutResetSeconds * 1000)

@@ -35,6 +35,7 @@
 - **Autocomplete suggestions** for computer names with adaptive window sizing.
 - **Computer name field** disabled until a **user password** is entered.
 - **No password storage** on disk. No AD module required.
+- Optional **Intune / Azure AD** mode: authenticate with Microsoft Graph (`DeviceManagementManagedDevices.Read.All`) to retrieve Windows LAPS credentials for managed devices.
 
 ---
 
@@ -45,6 +46,7 @@
 - **.NET Framework 4.7+**
 - Network access to a **domain controller** (LDAP 389 / LDAPS 636)
 - **LAPS read rights** on the targeted **Computer** objects (ACL/GPO Microsoft LAPS)
+- *(Optional)* **Microsoft Graph PowerShell SDK** (`Install-Module Microsoft.Graph`) for the Intune / Azure AD mode.
 
 ---
 
@@ -74,12 +76,39 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 
 ## Usage
 
-1. User / Password: enter an account with LAPS read rights (or leave blank to try with your session credentials if your ACL allows it).
-2. Controller/Domain: specify your DC/domain name.
-3. LDAPS: check if your DC exposes 636/TLS with a valid certificate (recommended in production).
-4. Computer name: enter the target PC (e.g. PC-IT-1234).
-5. Click Retrieve → type of LAPS, expiration, and (if authorized) password appear.
-6. Copy: the password is copied and a 20 s countdown automatically purges the clipboard.
+### LAPS (AD) tab
+1. **User / Password**: enter an account with LAPS read rights (or leave both blank to use your current logon token if it has the necessary ACLs).
+2. **Controller/Domain**: specify your DC/domain name.
+3. **LDAPS**: enable if your DC exposes 636/TLS with a valid certificate (recommended in production).
+4. **Computer name**: enter the target PC (e.g. `PC-IT-1234`).
+5. Click **Retrieve** → the script displays the LAPS type, expiration, and password (if authorized). The AD history and credentials are stored separately from Intune preferences.
+6. Click **Copy** to place the password on the clipboard. The 20 s countdown automatically purges it (if unchanged).
+
+### LAPS (Intune) tab
+1. Install the Microsoft Graph PowerShell SDK (`Install-Module Microsoft.Graph`) on the workstation if it is not already available.
+2. Click **Sign in**. A browser window opens for Azure AD/Entra ID authentication (SSO, MFA, conditional access, and federated IdPs are supported). Tokens stay in-memory for the current session.
+3. Enter the Intune device name and click **Retrieve**. If multiple devices match, select one in the results list.
+4. The password and expiration are retrieved from the Graph endpoint `deviceManagement/managedDevices/{id}/windowsLapsManagedDeviceInformation`. History, clipboard clearing, and the visibility toggle behave just like the AD tab, but are stored independently.
+
+## Intune / Azure AD configuration
+
+### Requirements
+- Windows devices must be **managed by Microsoft Intune** with a Windows LAPS policy assigned.
+- An Azure AD/Entra ID account with an Intune role that grants **Windows LAPS (Managed Device)** read access (e.g. Intune Administrator, or a custom role with the *Device Management > Managed Devices > Windows LAPS* permission).
+- Admin consent for the **Microsoft Graph delegated permission** `DeviceManagementManagedDevices.Read.All` (prompted automatically when the first administrator runs the Intune tab).
+
+### One-time setup
+1. Install the **Microsoft Graph PowerShell SDK** on the admin workstation:
+   ```powershell
+   Install-Module Microsoft.Graph
+   ```
+2. From the LAPS (Intune) tab, sign in with an account that can grant consent to `DeviceManagementManagedDevices.Read.All`. The Microsoft Graph PowerShell application (`Microsoft Graph Command Line Tools`) will be authorised for your tenant.
+3. Verify that the Intune role assigned to helpdesk users includes the Windows LAPS permissions so they can retrieve secrets after consenting.
+
+### Limitations
+- The Graph request uses the **beta** endpoint `deviceManagement/managedDevices/{id}/windowsLapsManagedDeviceInformation` (subject to future API changes).
+- `Connect-MgGraph` is executed with `-ContextScope Process`: users must authenticate at each launch; tokens are **not persisted** to disk.
+- Only Windows devices with **Intune Windows LAPS** configured will return credentials; Azure AD-only devices without Intune cannot be queried.
 
 ---
 
@@ -90,6 +119,7 @@ If SmartScreen/EDR blocks it: use the .ps1, sign the binary, or have it approved
 - Copy attempts to use the WinRT API (`IsAllowedInHistory=false`) to avoid the Win+V history.
 - Depending on Windows/tenant settings, this exclusion may not be honored for non-packaged apps. **100% effective solutions**: disable clipboard history via GPO, or package as a signed **MSIX**.
 - The "Remember user and domain" option stores the ID and AD values encrypted in `%LOCALAPPDATA%\LAPS-UI\prefs.json`.
+- The Intune tab authenticates via `Connect-MgGraph -ContextScope Process`; access tokens remain in memory and are discarded when the app closes (no token cache on disk).
 
 ---
 
