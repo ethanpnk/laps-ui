@@ -1084,7 +1084,7 @@ $translations = @{
     btnHistory_ToolTip = 'Historique'
     lblAzureStatusSignedOut = 'Non connecté'
     lblAzureStatusSignedIn  = 'Connecté en tant que {0}'
-    msgAzureConnectFirst = 'Veuillez d\'abord vous connecter à Microsoft Graph.'
+    msgAzureConnectFirst = "Veuillez d'abord vous connecter à Microsoft Graph."
     msgAzureNoDevices = 'Aucun appareil Intune ne correspond à votre requête.'
     msgAzureMultipleDevices = 'Sélectionnez un appareil pour récupérer le mot de passe.'
     msgAzureInstallModule = 'Le module PowerShell Microsoft.Graph est requis.'
@@ -2040,13 +2040,18 @@ function Update-AzureStatusLabel {
     $lblAzureStatus.Text = $script:t.lblAzureStatusSignedIn -f $acct
     if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Collapsed' }
     if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Visible'; $btnAzureSignOut.IsEnabled = $true }
+    if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $true }
   } else {
     $lblAzureStatus.Text = $script:t.lblAzureStatusSignedOut
     if ($btnAzureSignIn) { $btnAzureSignIn.Visibility = 'Visible'; $btnAzureSignIn.IsEnabled = -not ($script:AzureState -and $script:AzureState.IsConnecting) }
     if ($btnAzureSignOut) { $btnAzureSignOut.Visibility = 'Collapsed' }
+    if ($btnAzureSearch) { $btnAzureSearch.IsEnabled = $false }
   }
   if ($btnAzureSignIn -and $script:AzureState -and $script:AzureState.IsConnecting) {
     $btnAzureSignIn.IsEnabled = $false
+  }
+  if ($btnAzureSearch -and $script:AzureState -and $script:AzureState.IsConnecting) {
+    $btnAzureSearch.IsEnabled = $false
   }
 }
 
@@ -2097,7 +2102,7 @@ if ($tbAzureDevice) {
   })
   $tbAzureDevice.Add_KeyDown({
     if ($_.Key -eq 'Return') {
-      if ($btnAzureSearch) {
+      if ($btnAzureSearch -and $btnAzureSearch.IsEnabled) {
         $btnAzureSearch.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
       }
     } elseif ($_.Key -eq 'Down' -and $popAzureDevice -and $popAzureDevice.IsOpen -and $lbAzureDeviceHistory -and $lbAzureDeviceHistory.Items.Count -gt 0) {
