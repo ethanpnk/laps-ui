@@ -356,18 +356,6 @@ function Get-IntuneLapsPassword {
       @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials('$encodedEntraObjectId')?`$select=credentials,deviceName" }
     )
   }
-  if ($encodedAzureAdId) {
-    $requests += @(
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials/$encodedAzureAdId" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials('$encodedAzureAdId')" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials/$encodedAzureAdId?`$select=credentials" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials('$encodedAzureAdId')?`$select=credentials" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceLocalCredentials/$encodedAzureAdId" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceLocalCredentials('$encodedAzureAdId')" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceLocalCredentials/$encodedAzureAdId?`$select=credentials" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceLocalCredentials('$encodedAzureAdId')?`$select=credentials" }
-    )
-  }
   $resp = Invoke-GraphRequestWithFallback -Requests $requests
   if (-not $resp) { return $null }
 
