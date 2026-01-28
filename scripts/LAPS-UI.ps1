@@ -12,7 +12,7 @@
 $UseLdaps = $false
 $script:ClipboardAutoClearSeconds = 20
 $script:LockoutResetSeconds = $LockoutResetSeconds
-$CurrentVersion = '1.0.6'
+$CurrentVersion = '1.1.0'
 $script:LockoutTimer = $null
 $script:MaxAuthAttempts = 3
 $script:FailedAuthCount = 0
@@ -1747,7 +1747,7 @@ $translations = @{
     lblAzureStatusConnecting = 'Connessione in corso…'
     lblAzureStatusSignedIn  = 'Connesso come {0}'
     lblAzureSearchHintSignedOut = 'Accedi per abilitare la ricerca Intune.'
-    lblAzureSearchHintConnecting = 'Completa l’accesso nel browser per continuare.'
+    lblAzureSearchHintConnecting = "Completa l’accesso nel browser per continuare."
     lblAzureSearchHintSignedIn  = 'Inserisci il nome di un dispositivo Intune e fai clic su Recupera.'
     msgAzureConnectFirst = 'Accedere prima a Microsoft Graph.'
     msgAzureNoDevices = 'Nessun dispositivo Intune corrisponde alla ricerca.'
