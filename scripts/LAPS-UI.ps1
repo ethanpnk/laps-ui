@@ -406,12 +406,19 @@ function Get-IntuneLapsPassword {
 
   Ensure-LapsGraphModule
 
-  $deviceId = if ($null -ne $DeviceId) { ([string]$DeviceId).Trim() } else { '' }
+  $deviceId = ''
+  if ($null -ne $DeviceId) {
+    $deviceId = ([string]$DeviceId).Trim()
+  }
   if ([string]::IsNullOrWhiteSpace($deviceId)) { return $null }
 
   $encodedDeviceId = [Uri]::EscapeDataString($deviceId)
 
-  $azureAdId = if ($AzureAdDeviceId) { $AzureAdDeviceId.Trim() } else { $null }
+  $azureAdId = $null
+  if ($null -ne $AzureAdDeviceId) {
+    $azureAdId = ([string]$AzureAdDeviceId).Trim()
+    if ([string]::IsNullOrWhiteSpace($azureAdId)) { $azureAdId = $null }
+  }
 
   # Resolve Entra object id (devices.id) from AzureAD deviceId (managedDevice.azureADDeviceId)
   $entraObjectId = $null
@@ -3084,4 +3091,3 @@ $window.Add_KeyDown({
 })
 
 [void]$window.ShowDialog()
-
