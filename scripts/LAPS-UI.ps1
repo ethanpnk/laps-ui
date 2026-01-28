@@ -223,6 +223,28 @@ function Invoke-GraphRequestWithFallback {
   return $null
 }
 
+function Resolve-EntraDeviceObjectId {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)]
+    [string]$AzureAdDeviceId
+  )
+
+  $deviceGuid = $AzureAdDeviceId.Trim()
+  if ([string]::IsNullOrWhiteSpace($deviceGuid)) { return $null }
+
+  $safe = $deviceGuid.Replace("'", "''")
+  $encodedFilter = [Uri]::EscapeDataString("deviceId eq '$safe'")
+  $uri = "https://graph.microsoft.com/v1.0/devices?`$filter=$encodedFilter&`$select=id,deviceId,displayName"
+  $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+  if (-not $resp -or -not $resp.value) { return $null }
+  $value = $resp.value
+  if ($value -is [System.Collections.IList] -and $value.Count -gt 0) {
+    return (Get-GraphValueCI -Object $value[0] -Name 'id')
+  }
+  return (Get-GraphValueCI -Object $value -Name 'id')
+}
+
 function Disconnect-IntuneGraph {
   [CmdletBinding()]
   param()
@@ -296,6 +318,15 @@ function Get-IntuneLapsPassword {
   $encodedDeviceId = [Uri]::EscapeDataString($deviceId)
   $azureAdId = if ($AzureAdDeviceId) { $AzureAdDeviceId.Trim() } else { $null }
   $encodedAzureAdId = if ($azureAdId) { [Uri]::EscapeDataString($azureAdId) } else { $null }
+  $entraObjectId = $null
+  if ($azureAdId) {
+    try {
+      $entraObjectId = Resolve-EntraDeviceObjectId -AzureAdDeviceId $azureAdId
+    } catch {
+      $entraObjectId = $null
+    }
+  }
+  $encodedEntraObjectId = if ($entraObjectId) { [Uri]::EscapeDataString($entraObjectId) } else { $null }
   $requests = @(
     @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$deviceId/windowsLapsManagedDeviceInformation" }
     @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$encodedDeviceId/windowsLapsManagedDeviceInformation" }
@@ -310,6 +341,14 @@ function Get-IntuneLapsPassword {
     @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} }
     @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices('$encodedDeviceId')/retrieveWindowsLapsPassword"; Body = @{} }
   )
+  if ($encodedEntraObjectId) {
+    $requests += @(
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$encodedEntraObjectId?`$select=credentials,deviceName" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials('$encodedEntraObjectId')?`$select=credentials,deviceName" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$encodedEntraObjectId?`$select=credentials,deviceName" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials('$encodedEntraObjectId')?`$select=credentials,deviceName" }
+    )
+  }
   if ($encodedAzureAdId) {
     $requests += @(
       @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials/$encodedAzureAdId" }
