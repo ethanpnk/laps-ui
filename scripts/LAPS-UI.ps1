@@ -176,13 +176,27 @@ function Get-GraphValueCI {
 }
 
 function Get-LapsPasswordFromCredentialPayload {
-  param(
-    [Parameter(Mandatory)]
-    [object]$Payload
-  )
+  param([Parameter(Mandatory)][object]$Payload)
 
   $credentials = Get-GraphValueCI -Object $Payload -Name 'credentials'
   if (-not $credentials) { return $null }
+
+  # ✅ Case 1: credentials is a single hashtable/dictionary (common with deviceLocalCredentials)
+  if ($credentials -is [System.Collections.IDictionary]) {
+    $password = Get-GraphValueCI -Object $credentials -Name 'password'
+    if ($password) { return $password }
+
+    $passwordBase64 = Get-GraphValueCI -Object $credentials -Name 'passwordBase64'
+    if ($passwordBase64) {
+      try {
+        $bytes = [Convert]::FromBase64String([string]$passwordBase64)
+        return [Text.Encoding]::UTF8.GetString($bytes)
+      } catch { return $null }
+    }
+    return $null
+  }
+
+  # ✅ Case 2: credentials is an array/list
   if ($credentials -isnot [System.Collections.IEnumerable]) { return $null }
 
   foreach ($cred in $credentials) {
@@ -193,23 +207,19 @@ function Get-LapsPasswordFromCredentialPayload {
     $passwordBase64 = Get-GraphValueCI -Object $cred -Name 'passwordBase64'
     if ($passwordBase64) {
       try {
-        $bytes = [System.Convert]::FromBase64String([string]$passwordBase64)
-        return [System.Text.Encoding]::UTF8.GetString($bytes)
-      } catch {
-        return $null
-      }
+        $bytes = [Convert]::FromBase64String([string]$passwordBase64)
+        return [Text.Encoding]::UTF8.GetString($bytes)
+      } catch { return $null }
     }
   }
 
   return $null
 }
 
+
 function Invoke-GraphRequestWithFallback {
   [CmdletBinding()]
-  param(
-    [Parameter(Mandatory)]
-    [array]$Requests
-  )
+  param([Parameter(Mandatory)][array]$Requests)
 
   $lastError = $null
   foreach ($req in $Requests) {
@@ -217,14 +227,22 @@ function Invoke-GraphRequestWithFallback {
       $method = if ($req.Method) { $req.Method } else { 'GET' }
       $uri = $req.Uri
       if (-not $uri) { continue }
+
+      $resp = $null
       if ($req.ContainsKey('Body')) {
-        return Invoke-MgGraphRequest -Method $method -Uri $uri -Body $req.Body -ErrorAction Stop
+        $resp = Invoke-MgGraphRequest -Method $method -Uri $uri -Body $req.Body -ErrorAction Stop
+      } else {
+        $resp = Invoke-MgGraphRequest -Method $method -Uri $uri -ErrorAction Stop
       }
-      return Invoke-MgGraphRequest -Method $method -Uri $uri -ErrorAction Stop
+
+      return [pscustomobject]@{
+        Response = $resp
+        UsedUri  = $uri
+        UsedVerb = $method
+      }
     } catch {
-        # si endpoint pas supporté ("segment not found"), on tente le suivant
-        if (Test-GraphNotFoundLike $_) { continue }
-        $lastError = $_
+      if (Test-GraphNotFoundLike $_) { continue }
+      $lastError = $_
     }
   }
 
@@ -410,7 +428,6 @@ function Get-IntuneLapsPassword {
   if ([string]::IsNullOrWhiteSpace($deviceId)) { return $null }
 
   $encodedDeviceId = [Uri]::EscapeDataString($deviceId)
-
   $azureAdId = if ($AzureAdDeviceId) { $AzureAdDeviceId.Trim() } else { $null }
 
   # Resolve Entra object id (devices.id) from AzureAD deviceId (managedDevice.azureADDeviceId)
@@ -422,128 +439,204 @@ function Get-IntuneLapsPassword {
       $entraObjectId = $null
     }
   }
-
   $entraObjectId = Normalize-GuidString ([string]$entraObjectId)
 
-# --- Préfère d'abord directory/deviceLocalCredentials (Entra LAPS)
-$requests = @()
+  # --- Prefer directory/deviceLocalCredentials (Entra LAPS), then fallback to Intune action
+  $requests = @()
 
-$select = 'credentials,deviceName,lastBackupDateTime'
+  # Ensure we request lastBackupDateTime (used as "LastRotation")
+  $select = 'credentials,deviceName,lastBackupDateTime'
 
-if (-not [string]::IsNullOrWhiteSpace($entraObjectId)) {
-  $oid = Normalize-GuidString ([string]$entraObjectId)
-  if ($oid) {
+  if (-not [string]::IsNullOrWhiteSpace($entraObjectId)) {
+    $oid = Normalize-GuidString ([string]$entraObjectId)
+    if ($oid) {
+      $baseV1   = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$oid"
+      $baseBeta = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$oid"
 
-    $baseV1   = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$oid"
-    $baseBeta = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$oid"
-
-    $requests += @{
-      Method = 'GET'
-      Uri    = (New-GraphUri -BasePath $baseV1   -Query @{ '$select' = $select })
-    }
-    $requests += @{
-      Method = 'GET'
-      Uri    = (New-GraphUri -BasePath $baseBeta -Query @{ '$select' = $select })
-    }
-  }
-}
-
-# (optionnel) fallback azureAdDeviceId en dernier recours
-if (-not [string]::IsNullOrWhiteSpace($azureAdId)) {
-  $aad = Normalize-GuidString ([string]$azureAdId)
-  if ($aad) {
-
-    $baseV1   = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$aad"
-    $baseBeta = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$aad"
-
-    $requests += @{
-      Method = 'GET'
-      Uri    = (New-GraphUri -BasePath $baseV1   -Query @{ '$select' = $select })
-    }
-    $requests += @{
-      Method = 'GET'
-      Uri    = (New-GraphUri -BasePath $baseBeta -Query @{ '$select' = $select })
+      $requests += @{
+        Method = 'GET'
+        Uri    = (New-GraphUri -BasePath $baseV1   -Query @{ '$select' = $select })
+      }
+      $requests += @{
+        Method = 'GET'
+        Uri    = (New-GraphUri -BasePath $baseBeta -Query @{ '$select' = $select })
+      }
     }
   }
-}
 
-# 2) ensuite fallback Intune action
-$requests += @(
-  @{ Method = 'POST'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} },
-  @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} }
-)
+  # Optional fallback using the AzureAD deviceId directly (not ideal, but can work in some tenants)
+  if (-not [string]::IsNullOrWhiteSpace($azureAdId)) {
+    $aad = Normalize-GuidString ([string]$azureAdId)
+    if ($aad) {
+      $baseV1   = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$aad"
+      $baseBeta = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$aad"
 
-
-# (Optionnel) supprime complètement windowsLapsManagedDeviceInformation, vu qu'il te casse
-# sinon, garde-le MAIS en dernier, et en l'ignorant quand "segment not found"
-
-
- $resp = $null
-try {
-  $resp = Invoke-GraphRequestWithFallback -Requests $requests
-} catch {
-  # Si c'est juste "pas trouvé" => on retourne "pas de mot de passe" sans popup
-  if (Test-GraphNotFoundLike $_) {
-    return [pscustomobject]@{
-      Password             = $null
-      PasswordExpiration   = $null
-      AdministratorAccount = $null
-      Raw                  = $null
+      $requests += @{
+        Method = 'GET'
+        Uri    = (New-GraphUri -BasePath $baseV1   -Query @{ '$select' = $select })
+      }
+      $requests += @{
+        Method = 'GET'
+        Uri    = (New-GraphUri -BasePath $baseBeta -Query @{ '$select' = $select })
+      }
     }
   }
-  throw
-}
+
+  # Intune action fallback
+  $requests += @(
+    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} },
+    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} }
+  )
+
+  $resp = $null
+  try {
+    $call = Invoke-GraphRequestWithFallback -Requests $requests
+    if (-not $call) { return $null }
+
+    $resp = $call.Response
+    $usedUri = $call.UsedUri
+
+  } catch {
+    if (Test-GraphNotFoundLike $_) {
+      return [pscustomobject]@{
+        Password             = $null
+        PasswordExpiration   = $null
+        NextRotation         = $null
+        LastRotation         = $null
+        AdministratorAccount = $null
+        Raw                  = $null
+      }
+    }
+    throw
+  }
 
   if (-not $resp) { return $null }
 
-    $payload = $resp
-    if ($resp.value) {
-      $value = $resp.value
-      if ($value -is [System.Collections.IList]) {
-        if ($value.Count -gt 0) { $payload = $value[0] }
-      } else {
-        # IMPORTANT: deviceLocalCredentials retourne value = { ... } (objet), pas forcément une liste
-        $payload = $value
-      }
+  # Normalize payload (some endpoints return { value = ... })
+  $payload = $resp
+  if ($resp.value) {
+    $value = $resp.value
+    if ($value -is [System.Collections.IList]) {
+      if ($value.Count -gt 0) { $payload = $value[0] }
+    } else {
+      $payload = $value
     }
+  }
 
-
+  # Password extraction
   $rawPassword = Get-GraphValueCI -Object $payload -Name 'password'
-
   if (-not $rawPassword) {
-    # cas où le password est directement au niveau racine en base64
     $pb64 = Get-GraphValueCI -Object $payload -Name 'passwordBase64'
     if ($pb64) { $rawPassword = Decode-Base64Utf8 ([string]$pb64) }
   }
-
   if (-not $rawPassword) {
-    # cas wrapper credentials:[]
     $rawPassword = Get-LapsPasswordFromCredentialPayload -Payload $payload
   }
 
-  # cas où la réponse est value:[{passwordBase64...},{...}] et que tu as pris payload=value[0]
-  # => ok maintenant grâce au passwordBase64 racine
-
-
+  # Account name
   $rawAccount = Get-GraphValueCI -Object $payload -Name 'administratorAccountName'
   if (-not $rawAccount) { $rawAccount = Get-GraphValueCI -Object $payload -Name 'accountName' }
 
+  # Expiration / next rotation
   $rawExpiration = Get-GraphValueCI -Object $payload -Name 'passwordExpirationDateTime'
   if (-not $rawExpiration) { $rawExpiration = Get-GraphValueCI -Object $payload -Name 'passwordExpirationTime' }
   if (-not $rawExpiration) { $rawExpiration = Get-GraphValueCI -Object $payload -Name 'expirationDateTime' }
 
   $expiration = $null
   if ($rawExpiration) {
-    try { $expiration = ([DateTime]::Parse($rawExpiration)).ToLocalTime() } catch { $expiration = $null }
+    try { $expiration = ([DateTime]::Parse([string]$rawExpiration)).ToLocalTime() } catch { $expiration = $null }
   }
+
+  # --- Last rotation (best-effort)
+  $rawLastRotation = Get-GraphValueCI -Object $payload -Name 'lastBackupDateTime'
+
+  # If not present, try credentials.backupDateTime
+  if (-not $rawLastRotation) {
+    $creds = Get-GraphValueCI -Object $payload -Name 'credentials'
+
+    if ($creds -is [System.Collections.IDictionary]) {
+      $rawLastRotation = Get-GraphValueCI -Object $creds -Name 'backupDateTime'
+      if (-not $rawLastRotation) { $rawLastRotation = Get-GraphValueCI -Object $creds -Name 'createdDateTime' }
+    }
+    elseif ($creds -is [System.Collections.IList] -and $creds.Count -gt 0) {
+      $rawLastRotation = Get-GraphValueCI -Object $creds[0] -Name 'backupDateTime'
+      if (-not $rawLastRotation) { $rawLastRotation = Get-GraphValueCI -Object $creds[0] -Name 'createdDateTime' }
+    }
+  }
+
+  # Final fallback: refreshDateTime
+  if (-not $rawLastRotation) {
+    $rawLastRotation = Get-GraphValueCI -Object $payload -Name 'refreshDateTime'
+  }
+
+  $lastRotation = $null
+  if ($rawLastRotation) {
+    try { $lastRotation = ([DateTime]::Parse([string]$rawLastRotation)).ToLocalTime() } catch { $lastRotation = $null }
+  }
+
+
+  $source = if ($usedUri -match '/directory/deviceLocalCredentials/') { 'Entra LAPS (directory)' }
+            elseif ($usedUri -match 'retrieveWindowsLapsPassword')     { 'Intune (retrieveWindowsLapsPassword)' }
+            else { 'Graph' }
 
   [pscustomobject]@{
     Password             = $rawPassword
     PasswordExpiration   = $expiration
+    NextRotation         = $expiration
+    LastRotation         = $lastRotation
     AdministratorAccount = $rawAccount
-    Raw                  = $resp
+    Source              = $source
+    UsedUri              = $usedUri
+    Raw                  = $payload
   }
+
 }
+
+
+function Format-RelativeTime {
+  param([nullable[datetime]]$Date)
+
+  if ($null -eq $Date) { return $null }
+
+  $now = Get-Date
+  $span = $Date - $now
+  $abs  = [timespan]::FromSeconds([math]::Abs($span.TotalSeconds))
+
+  $parts = @()
+  if ($abs.Days -gt 0)    { $parts += "$($abs.Days)j" }
+  if ($abs.Hours -gt 0)   { $parts += "$($abs.Hours)h" }
+  if ($abs.Minutes -gt 0) { $parts += "$($abs.Minutes)m" }
+  if ($parts.Count -eq 0) { $parts += "0m" }
+
+  if ($span.TotalSeconds -ge 0) { return "dans $($parts -join ' ')" }
+  return "il y a $($parts -join ' ')"
+}
+
+function Format-DateWithRelative {
+  param([nullable[datetime]]$Date)
+
+  if ($null -eq $Date) { return $null }
+  $rel = Format-RelativeTime $Date
+  return "{0} ({1})" -f $Date.ToString("yyyy-MM-dd HH:mm:ss"), $rel
+}
+
+function Format-RotationLine {
+  param(
+    [string]$Label,
+    [nullable[datetime]]$Date,
+    [string]$FallbackReason
+  )
+
+  if ($null -ne $Date) {
+    return "{0,-14}: {1}" -f $Label, (Format-DateWithRelative $Date)
+  }
+
+  if ($FallbackReason) {
+    return "{0,-14}: N/A ({1})" -f $Label, $FallbackReason
+  }
+  return "{0,-14}: N/A" -f $Label
+}
+
 
 Add-Type @"
 using System;
@@ -2926,43 +3019,122 @@ if ($lbAzureDevices) {
 function Show-AzureDeviceDetails {
   param($Entry)
   if (-not $Entry -or -not $Entry.Device) { return }
+
   $device = $Entry.Device
   $lines = @()
-  if ($device.deviceName) { $lines += ("Device   : {0}" -f $device.deviceName) }
-  if ($device.userPrincipalName) { $lines += ("User     : {0}" -f $device.userPrincipalName) }
-  if ($device.enrolledDateTime) { try { $lines += ("Enrolled : {0}" -f ([DateTime]$device.enrolledDateTime).ToLocalTime()) } catch {} }
+
+  if ($device.deviceName) { $lines += ("Device    : {0}" -f $device.deviceName) }
+  if ($device.userPrincipalName) { $lines += ("User      : {0}" -f $device.userPrincipalName) }
+  if ($device.enrolledDateTime) { try { $lines += ("Enrolled  : {0}" -f ([DateTime]$device.enrolledDateTime).ToLocalTime()) } catch {} }
   if ($device.complianceState) { $lines += ("Compliance: {0}" -f $device.complianceState) }
-  if ($device.operatingSystem) { $lines += ("OS       : {0}" -f $device.operatingSystem) }
-  if ($device.id) { $lines += ("ID       : {0}" -f $device.id) }
+  if ($device.operatingSystem) { $lines += ("OS        : {0}" -f $device.operatingSystem) }
+  if ($device.id) { $lines += ("ID        : {0}" -f $device.id) }
+
   $txtAzureDetails.Text = ($lines -join [Environment]::NewLine)
   $gbAzureDetails.Visibility = 'Visible'
   $window.UpdateLayout()
+
   Clear-LapsPassword $script:AzureState
   Update-ExpirationIndicator $script:AzureState $null
+
   try {
     $azureAdDeviceId = Get-GraphValueCI -Object $device -Name 'azureADDeviceId'
     if (-not $azureAdDeviceId) { $azureAdDeviceId = Get-GraphValueCI -Object $device -Name 'azureAdDeviceId' }
+
     if ($azureAdDeviceId) { $txtAzureDetails.Text += "`nAzureADDeviceId (deviceId) : $azureAdDeviceId" }
+
     $resolvedObjectId = $null
     if ($azureAdDeviceId) {
       try { $resolvedObjectId = Resolve-EntraDeviceObjectId -AzureAdDeviceId $azureAdDeviceId } catch {}
       $txtAzureDetails.Text += "`nEntra objectId (resolved) : $resolvedObjectId"
     }
+
     $laps = Get-IntuneLapsPassword -DeviceId $device.id -AzureAdDeviceId $azureAdDeviceId
+
+                  $txtAzureDetails.Text += "`n--- Debug ---"
+                  $txtAzureDetails.Text += "`nSource  : $($laps.Source)"
+                  $txtAzureDetails.Text += "`nUsedUri : $($laps.UsedUri)"
+
+                  try {
+                    if ($laps.Raw -is [System.Collections.IDictionary]) {
+                      $txtAzureDetails.Text += "`nRawDictKeys : " + (($laps.Raw.Keys | ForEach-Object { [string]$_ }) -join ', ')
+                    } else {
+                      $txtAzureDetails.Text += "`nRawProps : " + (($laps.Raw.PSObject.Properties.Name) -join ', ')
+                    }
+                  } catch {}
+
+                  try {
+                    $payload = $laps.Raw
+                    if ($payload.value) { $payload = $payload.value } # au cas où
+                    $creds = Get-GraphValueCI -Object $payload -Name 'credentials'
+                    if ($creds) {
+                      $txtAzureDetails.Text += "`nCredentialsType : $($creds.GetType().FullName)"
+                      if ($creds -is [System.Collections.IEnumerable]) {
+                        $first = @($creds)[0]
+                        if ($first) {
+                          if ($first -is [System.Collections.IDictionary]) {
+                            $txtAzureDetails.Text += "`nCred0Keys : " + (($first.Keys | ForEach-Object { [string]$_ }) -join ', ')
+                          } else {
+                            $txtAzureDetails.Text += "`nCred0Props: " + (($first.PSObject.Properties.Name) -join ', ')
+                          }
+                        }
+                      }
+                    } else {
+                      $txtAzureDetails.Text += "`nNo credentials field in payload"
+                    }
+                  } catch {}
+
+
+
     if ($laps -and $laps.Password) {
       Set-LapsPassword $script:AzureState $laps.Password
-      if ($laps.AdministratorAccount) { $txtAzureDetails.Text += "`nAccount  : $($laps.AdministratorAccount)" }
+
+      if ($laps.AdministratorAccount) {
+        $txtAzureDetails.Text += "`nAccount   : $($laps.AdministratorAccount)"
+      }
+
+      # NEW: Last / Next rotation
+      if ($laps.LastRotation) {
+        $txtAzureDetails.Text += "`nLast rotation : $($laps.LastRotation)"
+      } else {
+        $txtAzureDetails.Text += "`nLast rotation : (unknown)"
+      }
+
+      if ($laps.NextRotation) {
+        $txtAzureDetails.Text += "`nNext rotation : $($laps.NextRotation)"
+      } elseif ($laps.PasswordExpiration) {
+        $txtAzureDetails.Text += "`nNext rotation : $($laps.PasswordExpiration)"
+      } else {
+        $txtAzureDetails.Text += "`nNext rotation : (unknown)"
+      }
+
       Update-ExpirationIndicator $script:AzureState $laps.PasswordExpiration
     } else {
+      # No password available, still show any timing we may have
+      if ($laps -and $laps.LastRotation) {
+        $txtAzureDetails.Text += "`nLast rotation : $($laps.LastRotation)"
+      }
+      if ($laps -and ($laps.NextRotation -or $laps.PasswordExpiration)) {
+        $nextRot = if ($null -ne $laps.NextRotation) {
+        $laps.NextRotation
+      } else {
+        $laps.PasswordExpiration
+      }
+      $txtDetails.Text += "`nNext rotation : $nextRot"
+
+      }
+
       Update-ExpirationIndicator $script:AzureState $(if ($laps) { $laps.PasswordExpiration } else { $null })
       $txtAzureDetails.Text += "`nNo LAPS password available."
     }
+
   } catch {
     $msg = Resolve-GraphErrorMessage $_
     $txtAzureDetails.Text += "`nError: $msg"
     [System.Windows.MessageBox]::Show("Graph query failed: $msg", 'Microsoft Graph', 'OK', 'Error') | Out-Null
   }
 }
+
 
 # ---------- Retrieve ----------
 $updateInfo = $null
