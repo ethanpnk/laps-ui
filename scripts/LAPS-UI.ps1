@@ -2854,7 +2854,11 @@ if ($btnAzureSignIn) {
       $window.Cursor = 'Wait'
       $connectArgs = @{ Scopes = @('DeviceManagementManagedDevices.Read.All','Device.Read.All','DeviceLocalCredential.Read.All') }
       try {
-        $handle = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
+        $interop = [System.Windows.Interop.WindowInteropHelper]::new($window)
+        $handle = $interop.Handle
+        if (-not $handle -or $handle -eq [IntPtr]::Zero) {
+          $handle = $interop.EnsureHandle()
+        }
         if ($handle -and $handle -ne [IntPtr]::Zero) {
           $connectArgs.ParentWindowHandle = $handle
         }
