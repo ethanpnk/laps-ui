@@ -1,4 +1,4 @@
-﻿param(
+param(
   [int]$LockoutResetSeconds = 60
 )
 
@@ -222,7 +222,9 @@ function Invoke-GraphRequestWithFallback {
       }
       return Invoke-MgGraphRequest -Method $method -Uri $uri -ErrorAction Stop
     } catch {
-      $lastError = $_
+        # si endpoint pas supporté ("segment not found"), on tente le suivant
+        if (Test-GraphNotFoundLike $_) { continue }
+        $lastError = $_
     }
   }
 
@@ -238,14 +240,26 @@ function New-GraphUri {
     [hashtable]$Query
   )
 
-  $qs = if ($Query) {
-    ($Query.GetEnumerator() | ForEach-Object {
-      "{0}={1}" -f [Uri]::EscapeDataString($_.Key), [Uri]::EscapeDataString([string]$_.Value)
-    }) -join "&"
-  } else { "" }
+  if (-not $Query -or $Query.Count -eq 0) { return $BasePath }
 
-  if ($qs) { return "$BasePath`?$qs" }
-  return $BasePath
+  $pairs = foreach ($k in $Query.Keys) {
+    $key = [string]$k
+    $val = [string]$Query[$k]
+    "{0}={1}" -f [Uri]::EscapeDataString($key), [Uri]::EscapeDataString($val)
+  }
+
+  return "$BasePath`?$(($pairs -join '&'))"
+}
+
+function Normalize-GuidString {
+  param([string]$Value)
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+
+  # Trim + remove all whitespace (CR/LF/tabs/spaces)
+  $v = $Value.Trim() -replace '\s+', ''
+
+  if ($v -match '^[0-9a-fA-F-]{36}$') { return $v }
+  return $null
 }
 
 function Resolve-EntraDeviceObjectId {
@@ -255,31 +269,39 @@ function Resolve-EntraDeviceObjectId {
     [string]$AzureAdDeviceId
   )
 
-  $deviceGuid = $AzureAdDeviceId.Trim()
-  if ([string]::IsNullOrWhiteSpace($deviceGuid)) { return $null }
+  $deviceGuid = Normalize-GuidString $AzureAdDeviceId
+  if (-not $deviceGuid) { return $null }
 
+  # 1) Try direct GET by object id (only works if AzureAdDeviceId is already the Entra object id)
   try {
     $direct = Invoke-MgGraphRequest -Method GET `
       -Uri "https://graph.microsoft.com/v1.0/devices/$deviceGuid?`$select=id,deviceId,displayName" `
       -ErrorAction Stop
+
     $directId = Get-GraphValueCI -Object $direct -Name 'id'
+    $directId = Normalize-GuidString ([string]$directId)
     if ($directId) { return $directId }
   } catch {
-    # Ignore and try deviceId lookup.
+    # Ignore and try deviceId filter.
   }
 
-  $safe = $deviceGuid.Replace("'", "''")
-  $filter = "deviceId eq '$safe'"
+  # 2) Lookup by deviceId (this is the normal path)
+  $filter = "deviceId eq '$deviceGuid'"
   $encodedFilter = [Uri]::EscapeDataString($filter)
   $uri = "https://graph.microsoft.com/v1.0/devices?`$filter=$encodedFilter&`$select=id,deviceId,displayName&`$count=true"
   $headers = @{ 'ConsistencyLevel' = 'eventual' }
+
   $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -Headers $headers -ErrorAction Stop
   if (-not $resp -or -not $resp.value) { return $null }
-  $value = $resp.value
-  if ($value -is [System.Collections.IList] -and $value.Count -gt 0) {
-    return (Get-GraphValueCI -Object $value[0] -Name 'id')
+
+  $first = $resp.value
+  if ($first -is [System.Collections.IList] -and $first.Count -gt 0) {
+    $id = Get-GraphValueCI -Object $first[0] -Name 'id'
+  } else {
+    $id = Get-GraphValueCI -Object $first -Name 'id'
   }
-  return (Get-GraphValueCI -Object $value -Name 'id')
+
+  return (Normalize-GuidString ([string]$id))
 }
 
 function Disconnect-IntuneGraph {
@@ -340,6 +362,39 @@ function Search-IntuneDevices {
   return @($unique.Values)
 }
 
+function Test-GraphNotFoundLike {
+  param([object]$ErrorRecord)
+
+  $msg = ''
+  try {
+    if ($ErrorRecord -is [System.Management.Automation.ErrorRecord]) {
+      $msg = ($ErrorRecord.Exception.Message + "`n" + $ErrorRecord.ErrorDetails.Message)
+    } else {
+      $msg = [string]$ErrorRecord
+    }
+  } catch {}
+
+  # Cas fréquents Graph quand la ressource n'existe pas / pas provisionnée
+  return (
+    $msg -match 'could not be found' -or
+    $msg -match 'Request_ResourceNotFound' -or
+    $msg -match 'ResourceNotFound' -or
+    $msg -match 'Resource not found for the segment' -or
+    $msg -match '\b404\b' -or
+    ($msg -match 'deviceLocalCredentials' -and $msg -match 'not be found')
+  )
+}
+
+function Decode-Base64Utf8 {
+  param([string]$Base64)
+  if ([string]::IsNullOrWhiteSpace($Base64)) { return $null }
+  try {
+    $bytes = [Convert]::FromBase64String($Base64)
+    return [Text.Encoding]::UTF8.GetString($bytes)
+  } catch { return $null }
+}
+
+
 function Get-IntuneLapsPassword {
   [CmdletBinding()]
   param(
@@ -351,65 +406,135 @@ function Get-IntuneLapsPassword {
 
   Ensure-LapsGraphModule
 
-  $deviceId = $DeviceId.Trim()
+  $deviceId = if ($null -ne $DeviceId) { ([string]$DeviceId).Trim() } else { '' }
+  if ([string]::IsNullOrWhiteSpace($deviceId)) { return $null }
+
   $encodedDeviceId = [Uri]::EscapeDataString($deviceId)
+
   $azureAdId = if ($AzureAdDeviceId) { $AzureAdDeviceId.Trim() } else { $null }
-  $encodedAzureAdId = if ($azureAdId) { [Uri]::EscapeDataString($azureAdId) } else { $null }
+
+  # Resolve Entra object id (devices.id) from AzureAD deviceId (managedDevice.azureADDeviceId)
   $entraObjectId = $null
-  if ($azureAdId) {
+  if (-not [string]::IsNullOrWhiteSpace($azureAdId)) {
     try {
       $entraObjectId = Resolve-EntraDeviceObjectId -AzureAdDeviceId $azureAdId
     } catch {
       $entraObjectId = $null
     }
   }
-  $encodedEntraObjectId = if ($entraObjectId) { [Uri]::EscapeDataString($entraObjectId) } else { $null }
-  $requests = @(
-    @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$deviceId/windowsLapsManagedDeviceInformation" }
-    @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$encodedDeviceId/windowsLapsManagedDeviceInformation" }
-    @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices('$encodedDeviceId')/windowsLapsManagedDeviceInformation" }
-    @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$deviceId/windowsLapsManagedDeviceInformation" }
-    @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$encodedDeviceId/windowsLapsManagedDeviceInformation" }
-    @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices('$encodedDeviceId')/windowsLapsManagedDeviceInformation" }
-    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$deviceId/retrieveWindowsLapsPassword"; Body = @{} }
-    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} }
-    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices('$encodedDeviceId')/retrieveWindowsLapsPassword"; Body = @{} }
-    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$deviceId/retrieveWindowsLapsPassword"; Body = @{} }
-    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} }
-    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices('$encodedDeviceId')/retrieveWindowsLapsPassword"; Body = @{} }
-  )
-  if ($encodedEntraObjectId -and $entraObjectId -match '^[0-9a-fA-F-]{36}$') {
-    $requests += @(
-      @{ Method = 'GET'; Uri = (New-GraphUri -BasePath "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$entraObjectId" -Query @{ '$select' = 'credentials,deviceName' }) }
-      @{ Method = 'GET'; Uri = (New-GraphUri -BasePath "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$entraObjectId" -Query @{ '$select' = 'credentials,deviceName' }) }
-    )
-  }
-  $resp = Invoke-GraphRequestWithFallback -Requests $requests
-  if (-not $resp) { return $null }
 
-  $payload = $resp
-  if ($resp.value) {
-    $value = $resp.value
-    if ($value -is [System.Collections.IList] -and $value.Count -gt 0) {
-      $payload = $value[0]
+  $entraObjectId = Normalize-GuidString ([string]$entraObjectId)
+
+# --- Préfère d'abord directory/deviceLocalCredentials (Entra LAPS)
+$requests = @()
+
+$select = 'credentials,deviceName,lastBackupDateTime'
+
+if (-not [string]::IsNullOrWhiteSpace($entraObjectId)) {
+  $oid = Normalize-GuidString ([string]$entraObjectId)
+  if ($oid) {
+
+    $baseV1   = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$oid"
+    $baseBeta = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$oid"
+
+    $requests += @{
+      Method = 'GET'
+      Uri    = (New-GraphUri -BasePath $baseV1   -Query @{ '$select' = $select })
+    }
+    $requests += @{
+      Method = 'GET'
+      Uri    = (New-GraphUri -BasePath $baseBeta -Query @{ '$select' = $select })
     }
   }
+}
+
+# (optionnel) fallback azureAdDeviceId en dernier recours
+if (-not [string]::IsNullOrWhiteSpace($azureAdId)) {
+  $aad = Normalize-GuidString ([string]$azureAdId)
+  if ($aad) {
+
+    $baseV1   = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$aad"
+    $baseBeta = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$aad"
+
+    $requests += @{
+      Method = 'GET'
+      Uri    = (New-GraphUri -BasePath $baseV1   -Query @{ '$select' = $select })
+    }
+    $requests += @{
+      Method = 'GET'
+      Uri    = (New-GraphUri -BasePath $baseBeta -Query @{ '$select' = $select })
+    }
+  }
+}
+
+# 2) ensuite fallback Intune action
+$requests += @(
+  @{ Method = 'POST'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} },
+  @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} }
+)
+
+
+# (Optionnel) supprime complètement windowsLapsManagedDeviceInformation, vu qu'il te casse
+# sinon, garde-le MAIS en dernier, et en l'ignorant quand "segment not found"
+
+
+ $resp = $null
+try {
+  $resp = Invoke-GraphRequestWithFallback -Requests $requests
+} catch {
+  # Si c'est juste "pas trouvé" => on retourne "pas de mot de passe" sans popup
+  if (Test-GraphNotFoundLike $_) {
+    return [pscustomobject]@{
+      Password             = $null
+      PasswordExpiration   = $null
+      AdministratorAccount = $null
+      Raw                  = $null
+    }
+  }
+  throw
+}
+
+  if (-not $resp) { return $null }
+
+    $payload = $resp
+    if ($resp.value) {
+      $value = $resp.value
+      if ($value -is [System.Collections.IList]) {
+        if ($value.Count -gt 0) { $payload = $value[0] }
+      } else {
+        # IMPORTANT: deviceLocalCredentials retourne value = { ... } (objet), pas forcément une liste
+        $payload = $value
+      }
+    }
+
 
   $rawPassword = Get-GraphValueCI -Object $payload -Name 'password'
-  if (-not $rawPassword) { $rawPassword = Get-LapsPasswordFromCredentialPayload -Payload $payload }
+
+  if (-not $rawPassword) {
+    # cas où le password est directement au niveau racine en base64
+    $pb64 = Get-GraphValueCI -Object $payload -Name 'passwordBase64'
+    if ($pb64) { $rawPassword = Decode-Base64Utf8 ([string]$pb64) }
+  }
+
+  if (-not $rawPassword) {
+    # cas wrapper credentials:[]
+    $rawPassword = Get-LapsPasswordFromCredentialPayload -Payload $payload
+  }
+
+  # cas où la réponse est value:[{passwordBase64...},{...}] et que tu as pris payload=value[0]
+  # => ok maintenant grâce au passwordBase64 racine
+
+
   $rawAccount = Get-GraphValueCI -Object $payload -Name 'administratorAccountName'
   if (-not $rawAccount) { $rawAccount = Get-GraphValueCI -Object $payload -Name 'accountName' }
+
   $rawExpiration = Get-GraphValueCI -Object $payload -Name 'passwordExpirationDateTime'
   if (-not $rawExpiration) { $rawExpiration = Get-GraphValueCI -Object $payload -Name 'passwordExpirationTime' }
   if (-not $rawExpiration) { $rawExpiration = Get-GraphValueCI -Object $payload -Name 'expirationDateTime' }
 
   $expiration = $null
   if ($rawExpiration) {
-    try {
-      $expiration = ([DateTime]::Parse($rawExpiration)).ToLocalTime()
-    } catch {
-      $expiration = $null
-    }
+    try { $expiration = ([DateTime]::Parse($rawExpiration)).ToLocalTime() } catch { $expiration = $null }
   }
 
   [pscustomobject]@{
@@ -2959,3 +3084,4 @@ $window.Add_KeyDown({
 })
 
 [void]$window.ShowDialog()
+
