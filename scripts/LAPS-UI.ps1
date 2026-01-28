@@ -240,10 +240,22 @@ function Resolve-EntraDeviceObjectId {
   $deviceGuid = $AzureAdDeviceId.Trim()
   if ([string]::IsNullOrWhiteSpace($deviceGuid)) { return $null }
 
+  try {
+    $direct = Invoke-MgGraphRequest -Method GET `
+      -Uri "https://graph.microsoft.com/v1.0/devices/$deviceGuid?`$select=id,deviceId,displayName" `
+      -ErrorAction Stop
+    $directId = Get-GraphValueCI -Object $direct -Name 'id'
+    if ($directId) { return $directId }
+  } catch {
+    # Ignore and try deviceId lookup.
+  }
+
   $safe = $deviceGuid.Replace("'", "''")
-  $encodedFilter = [Uri]::EscapeDataString("deviceId eq '$safe'")
-  $uri = "https://graph.microsoft.com/v1.0/devices?`$filter=$encodedFilter&`$select=id,deviceId,displayName"
-  $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+  $filter = "deviceId eq '$safe'"
+  $encodedFilter = [Uri]::EscapeDataString($filter)
+  $uri = "https://graph.microsoft.com/v1.0/devices?`$filter=$encodedFilter&`$select=id,deviceId,displayName&`$count=true"
+  $headers = @{ 'ConsistencyLevel' = 'eventual' }
+  $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -Headers $headers -ErrorAction Stop
   if (-not $resp -or -not $resp.value) { return $null }
   $value = $resp.value
   if ($value -is [System.Collections.IList] -and $value.Count -gt 0) {
@@ -348,12 +360,10 @@ function Get-IntuneLapsPassword {
     @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$encodedDeviceId/retrieveWindowsLapsPassword"; Body = @{} }
     @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices('$encodedDeviceId')/retrieveWindowsLapsPassword"; Body = @{} }
   )
-  if ($encodedEntraObjectId) {
+  if ($encodedEntraObjectId -and $entraObjectId -match '^[0-9a-fA-F-]{36}$') {
     $requests += @(
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$encodedEntraObjectId?`$select=credentials,deviceName" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials('$encodedEntraObjectId')?`$select=credentials,deviceName" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$encodedEntraObjectId?`$select=credentials,deviceName" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials('$encodedEntraObjectId')?`$select=credentials,deviceName" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$entraObjectId?`$select=credentials,deviceName" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$entraObjectId?`$select=credentials,deviceName" }
     )
   }
   $resp = Invoke-GraphRequestWithFallback -Requests $requests
@@ -2789,6 +2799,12 @@ function Show-AzureDeviceDetails {
   try {
     $azureAdDeviceId = Get-GraphValueCI -Object $device -Name 'azureADDeviceId'
     if (-not $azureAdDeviceId) { $azureAdDeviceId = Get-GraphValueCI -Object $device -Name 'azureAdDeviceId' }
+    if ($azureAdDeviceId) { $txtAzureDetails.Text += "`nAzureADDeviceId (deviceId) : $azureAdDeviceId" }
+    $resolvedObjectId = $null
+    if ($azureAdDeviceId) {
+      try { $resolvedObjectId = Resolve-EntraDeviceObjectId -AzureAdDeviceId $azureAdDeviceId } catch {}
+      $txtAzureDetails.Text += "`nEntra objectId (resolved) : $resolvedObjectId"
+    }
     $laps = Get-IntuneLapsPassword -DeviceId $device.id -AzureAdDeviceId $azureAdDeviceId
     if ($laps -and $laps.Password) {
       Set-LapsPassword $script:AzureState $laps.Password
