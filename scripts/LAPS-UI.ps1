@@ -1132,14 +1132,16 @@ function Show-UpdatePrompt {
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
           <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" Text="Application (client) ID" x:Name="lblAzureClientId"/>
           <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" x:Name="tbAzureClientId" Margin="0,0,0,8"/>
           <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" Text="Tenant ID" x:Name="lblAzureTenantId"/>
           <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="tbAzureTenantId" Margin="0,0,0,8"/>
-          <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" x:Name="lblAzureStatus" Text="Not signed in" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" Margin="0,8,0,0"/>
-          <Button Grid.Row="2" Grid.Column="2" x:Name="btnAzureSignIn" Content="Sign in" Style="{StaticResource AccentButton}" Margin="12,8,0,0"/>
-          <Button Grid.Row="2" Grid.Column="3" x:Name="btnAzureSignOut" Content="Sign out" Style="{StaticResource AccentButton}" Margin="12,8,0,0" Visibility="Collapsed"/>
+          <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" x:Name="lblAzureAuthHelp" Text="Optional: leave these empty for standard sign-in. Only fill them if your admin provided an app (client) ID and tenant ID." VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="lblAzureStatus" Text="Not signed in" VerticalAlignment="Center" Foreground="{DynamicResource LabelBrush}" Margin="0,8,0,0"/>
+          <Button Grid.Row="3" Grid.Column="2" x:Name="btnAzureSignIn" Content="Sign in" Style="{StaticResource AccentButton}" Margin="12,8,0,0"/>
+          <Button Grid.Row="3" Grid.Column="3" x:Name="btnAzureSignOut" Content="Sign out" Style="{StaticResource AccentButton}" Margin="12,8,0,0" Visibility="Collapsed"/>
         </Grid>
       </GroupBox>
 
@@ -1519,6 +1521,7 @@ $translations = @{
     btnAzureSignOut = 'Sign out'
     lblAzureClientId = 'Application (client) ID'
     lblAzureTenantId = 'Tenant ID'
+    lblAzureAuthHelp = 'Optional: leave these empty for standard sign-in. Only fill them if your admin provided an app (client) ID and tenant ID.'
     gbSecurity      = 'Security'
     cbLdaps         = 'Use LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Enable clipboard auto-clear'
@@ -1583,6 +1586,7 @@ $translations = @{
     btnAzureSignOut = 'Se déconnecter'
     lblAzureClientId = "ID d'application (client)"
     lblAzureTenantId = 'ID de locataire'
+    lblAzureAuthHelp = "Optionnel : laissez ces champs vides pour une connexion standard. Renseignez-les uniquement si votre admin vous a fourni un ID d’application (client) et un ID de locataire."
     gbSecurity      = 'Sécurité'
     cbLdaps         = 'Utiliser LDAPS (TLS 636)'
     cbClipboardAutoClear = "Activer l'effacement automatique du presse-papiers"
@@ -1613,7 +1617,7 @@ $translations = @{
     lblAzureStatusConnecting = 'Connexion en cours…'
     lblAzureStatusSignedIn  = 'Connecté en tant que {0}'
     lblAzureSearchHintSignedOut = 'Connectez-vous pour activer la recherche Intune.'
-    lblAzureSearchHintConnecting = "Termine l'authentification dans le navigateur pour continuer."
+    lblAzureSearchHintConnecting = "Terminez l'authentification dans le navigateur pour continuer."
     lblAzureSearchHintSignedIn  = "Saisissez le nom d'un appareil Intune puis cliquez sur Récupérer."
     msgAzureConnectFirst = "Veuillez d'abord vous connecter à Microsoft Graph."
     msgAzureNoDevices = 'Aucun appareil Intune ne correspond à votre requête.'
@@ -1647,6 +1651,7 @@ $translations = @{
     btnAzureSignOut = 'Cerrar sesión'
     lblAzureClientId = 'ID de aplicación (cliente)'
     lblAzureTenantId = 'ID de inquilino'
+    lblAzureAuthHelp = 'Opcional: deje estos campos vacíos para el inicio de sesión estándar. Rellénelos solo si su administrador le proporcionó un ID de aplicación (cliente) y un ID de inquilino.'
     gbSecurity      = 'Seguridad'
     cbLdaps         = 'Usar LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Habilitar borrado automático del portapapeles'
@@ -1711,6 +1716,7 @@ $translations = @{
     btnAzureSignOut = 'Disconnetti'
     lblAzureClientId = 'ID applicazione (client)'
     lblAzureTenantId = 'ID tenant'
+    lblAzureAuthHelp = "Facoltativo: lascia vuoti questi campi per l'accesso standard. Compilali solo se l'amministratore ti ha fornito un ID applicazione (client) e un ID tenant."
     gbSecurity      = 'Sicurezza'
     cbLdaps         = 'Usa LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Abilita pulizia automatica degli appunti'
@@ -1775,6 +1781,7 @@ $translations = @{
     btnAzureSignOut = 'Abmelden'
     lblAzureClientId = 'Anwendungs-ID (Client-ID)'
     lblAzureTenantId = 'Mandanten-ID'
+    lblAzureAuthHelp = 'Optional: Lassen Sie diese Felder leer für die Standardanmeldung. Füllen Sie sie nur aus, wenn Ihr Administrator eine Anwendungs-ID (Client-ID) und eine Mandanten-ID bereitgestellt hat.'
     gbSecurity      = 'Sicherheit'
     cbLdaps         = 'LDAPS verwenden (TLS 636)'
     cbClipboardAutoClear = 'Zwischenablage automatisch löschen aktivieren'
@@ -1839,6 +1846,7 @@ $translations = @{
     btnAzureSignOut = 'Sair'
     lblAzureClientId = 'ID do aplicativo (cliente)'
     lblAzureTenantId = 'ID do locatário'
+    lblAzureAuthHelp = 'Opcional: deixe estes campos vazios para o login padrão. Preencha apenas se o administrador forneceu um ID do aplicativo (cliente) e um ID do locatário.'
     gbSecurity      = 'Segurança'
     cbLdaps         = 'Usar LDAPS (TLS 636)'
     cbClipboardAutoClear = 'Ativar limpeza automática da área de transferência'
@@ -1903,6 +1911,7 @@ $translations = @{
     btnAzureSignOut = '注销'
     lblAzureClientId = '应用程序 (客户端) ID'
     lblAzureTenantId = '租户 ID'
+    lblAzureAuthHelp = '可选：留空以使用标准登录。仅当管理员提供了应用程序(客户端) ID 和租户 ID 时才填写。'
     gbSecurity      = '安全'
     cbLdaps         = '使用 LDAPS (TLS 636)'
     cbClipboardAutoClear = '启用剪贴板自动清除'
@@ -1967,6 +1976,7 @@ $translations = @{
     btnAzureSignOut = 'تسجيل الخروج'
     lblAzureClientId = 'معرّف التطبيق (العميل)'
     lblAzureTenantId = 'معرّف المستأجر'
+    lblAzureAuthHelp = 'اختياري: اترك هذه الحقول فارغة لتسجيل الدخول القياسي. املأها فقط إذا زوّدك المسؤول بمعرّف التطبيق (العميل) ومعرّف المستأجر.'
     gbSecurity      = 'الأمان'
     cbLdaps         = 'استخدام LDAPS ‏(TLS 636)'
     cbClipboardAutoClear = 'تمكين المسح التلقائي للحافظة'
@@ -2042,6 +2052,7 @@ function Apply-Language {
   if ($btnAzureSignOut) { $btnAzureSignOut.Content = $t.btnAzureSignOut }
   if ($lblAzureClientId) { $lblAzureClientId.Text = $t.lblAzureClientId }
   if ($lblAzureTenantId) { $lblAzureTenantId.Text = $t.lblAzureTenantId }
+  if ($lblAzureAuthHelp) { $lblAzureAuthHelp.Text = $t.lblAzureAuthHelp }
   $gbSecurity.Header    = $t.gbSecurity
   $cbLdaps.Content      = $t.cbLdaps
   $cbClipboardAutoClear.Content = $t.cbClipboardAutoClear
@@ -2103,6 +2114,7 @@ $lblCompName   = $window.FindName("lblCompName")
 $lblAzureDeviceName = $window.FindName("lblAzureDeviceName")
 $lblAzureClientId = $window.FindName("lblAzureClientId")
 $lblAzureTenantId = $window.FindName("lblAzureTenantId")
+$lblAzureAuthHelp = $window.FindName("lblAzureAuthHelp")
 $lblAzureStatus = $window.FindName("lblAzureStatus")
 $lblClipboardDelay = $window.FindName("lblClipboardDelay")
 $lblTheme      = $window.FindName("lblTheme")
