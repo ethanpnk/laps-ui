@@ -168,6 +168,35 @@ function Get-GraphValueCI {
   return $null
 }
 
+function Get-LapsPasswordFromCredentialPayload {
+  param(
+    [Parameter(Mandatory)]
+    [object]$Payload
+  )
+
+  $credentials = Get-GraphValueCI -Object $Payload -Name 'credentials'
+  if (-not $credentials) { return $null }
+  if ($credentials -isnot [System.Collections.IEnumerable]) { return $null }
+
+  foreach ($cred in $credentials) {
+    if (-not $cred) { continue }
+    $password = Get-GraphValueCI -Object $cred -Name 'password'
+    if ($password) { return $password }
+
+    $passwordBase64 = Get-GraphValueCI -Object $cred -Name 'passwordBase64'
+    if ($passwordBase64) {
+      try {
+        $bytes = [System.Convert]::FromBase64String([string]$passwordBase64)
+        return [System.Text.Encoding]::UTF8.GetString($bytes)
+      } catch {
+        return $null
+      }
+    }
+  }
+
+  return $null
+}
+
 function Invoke-GraphRequestWithFallback {
   [CmdletBinding()]
   param(
@@ -283,8 +312,14 @@ function Get-IntuneLapsPassword {
   )
   if ($encodedAzureAdId) {
     $requests += @(
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials/$encodedAzureAdId" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials('$encodedAzureAdId')" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials/$encodedAzureAdId?`$select=credentials" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceLocalCredentials('$encodedAzureAdId')?`$select=credentials" }
       @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceLocalCredentials/$encodedAzureAdId" }
       @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceLocalCredentials('$encodedAzureAdId')" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceLocalCredentials/$encodedAzureAdId?`$select=credentials" }
+      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceLocalCredentials('$encodedAzureAdId')?`$select=credentials" }
     )
   }
   $resp = Invoke-GraphRequestWithFallback -Requests $requests
@@ -299,6 +334,7 @@ function Get-IntuneLapsPassword {
   }
 
   $rawPassword = Get-GraphValueCI -Object $payload -Name 'password'
+  if (-not $rawPassword) { $rawPassword = Get-LapsPasswordFromCredentialPayload -Payload $payload }
   $rawAccount = Get-GraphValueCI -Object $payload -Name 'administratorAccountName'
   if (-not $rawAccount) { $rawAccount = Get-GraphValueCI -Object $payload -Name 'accountName' }
   $rawExpiration = Get-GraphValueCI -Object $payload -Name 'passwordExpirationDateTime'
