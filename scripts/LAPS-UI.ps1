@@ -145,6 +145,55 @@ function Resolve-GraphErrorMessage {
   }
 }
 
+function Get-GraphValueCI {
+  param(
+    [Parameter(Mandatory)]
+    [object]$Object,
+    [Parameter(Mandatory)]
+    [string]$Name
+  )
+
+  if ($null -eq $Object) { return $null }
+
+  if ($Object -is [System.Collections.IDictionary]) {
+    foreach ($key in $Object.Keys) {
+      if ($key -ieq $Name) { return $Object[$key] }
+    }
+  }
+
+  foreach ($prop in $Object.PSObject.Properties) {
+    if ($prop.Name -ieq $Name) { return $prop.Value }
+  }
+
+  return $null
+}
+
+function Invoke-GraphRequestWithFallback {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)]
+    [array]$Requests
+  )
+
+  $lastError = $null
+  foreach ($req in $Requests) {
+    try {
+      $method = if ($req.Method) { $req.Method } else { 'GET' }
+      $uri = $req.Uri
+      if (-not $uri) { continue }
+      if ($req.ContainsKey('Body')) {
+        return Invoke-MgGraphRequest -Method $method -Uri $uri -Body $req.Body -ErrorAction Stop
+      }
+      return Invoke-MgGraphRequest -Method $method -Uri $uri -ErrorAction Stop
+    } catch {
+      $lastError = $_
+    }
+  }
+
+  if ($lastError) { throw $lastError }
+  return $null
+}
+
 function Disconnect-IntuneGraph {
   [CmdletBinding()]
   param()
@@ -212,22 +261,43 @@ function Get-IntuneLapsPassword {
 
   Ensure-LapsGraphModule
 
-  $uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$DeviceId/windowsLapsManagedDeviceInformation"
-  $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+  $deviceId = $DeviceId.Trim()
+  $requests = @(
+    @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$deviceId/windowsLapsManagedDeviceInformation" }
+    @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$deviceId/windowsLapsManagedDeviceInformation" }
+    @{ Method = 'POST'; Uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$deviceId/retrieveWindowsLapsPassword"; Body = @{} }
+  )
+  $resp = Invoke-GraphRequestWithFallback -Requests $requests
+  if (-not $resp) { return $null }
+
+  $payload = $resp
+  if ($resp.value) {
+    $value = $resp.value
+    if ($value -is [System.Collections.IList] -and $value.Count -gt 0) {
+      $payload = $value[0]
+    }
+  }
+
+  $rawPassword = Get-GraphValueCI -Object $payload -Name 'password'
+  $rawAccount = Get-GraphValueCI -Object $payload -Name 'administratorAccountName'
+  if (-not $rawAccount) { $rawAccount = Get-GraphValueCI -Object $payload -Name 'accountName' }
+  $rawExpiration = Get-GraphValueCI -Object $payload -Name 'passwordExpirationDateTime'
+  if (-not $rawExpiration) { $rawExpiration = Get-GraphValueCI -Object $payload -Name 'passwordExpirationTime' }
+  if (-not $rawExpiration) { $rawExpiration = Get-GraphValueCI -Object $payload -Name 'expirationDateTime' }
 
   $expiration = $null
-  if ($resp.passwordExpirationDateTime) {
+  if ($rawExpiration) {
     try {
-      $expiration = ([DateTime]::Parse($resp.passwordExpirationDateTime)).ToLocalTime()
+      $expiration = ([DateTime]::Parse($rawExpiration)).ToLocalTime()
     } catch {
       $expiration = $null
     }
   }
 
   [pscustomobject]@{
-    Password             = $resp.password
+    Password             = $rawPassword
     PasswordExpiration   = $expiration
-    AdministratorAccount = $resp.administratorAccountName
+    AdministratorAccount = $rawAccount
     Raw                  = $resp
   }
 }
