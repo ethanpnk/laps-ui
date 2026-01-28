@@ -102,7 +102,10 @@ function Connect-IntuneGraph {
   }
   if (-not [string]::IsNullOrWhiteSpace($ClientId)) { $connectParams.ClientId = $ClientId }
   if ($ParentWindowHandle -and $ParentWindowHandle.Value -ne [IntPtr]::Zero) {
-    $connectParams.ParentWindowHandle = $ParentWindowHandle.Value
+    $connectCmd = Get-Command Connect-MgGraph -ErrorAction SilentlyContinue
+    if ($connectCmd -and $connectCmd.Parameters.ContainsKey('ParentWindowHandle')) {
+      $connectParams.ParentWindowHandle = $ParentWindowHandle.Value
+    }
   }
   if (-not [string]::IsNullOrWhiteSpace($TenantId)) { $connectParams.TenantId = $TenantId }
   Connect-MgGraph @connectParams | Out-Null
