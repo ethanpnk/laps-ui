@@ -87,6 +87,9 @@ function Connect-IntuneGraph {
     [string]$ClientId,
 
     [Parameter()]
+    [Nullable[System.IntPtr]]$ParentWindowHandle,
+
+    [Parameter()]
     [string]$TenantId
   )
 
@@ -98,6 +101,9 @@ function Connect-IntuneGraph {
     ErrorAction  = 'Stop'
   }
   if (-not [string]::IsNullOrWhiteSpace($ClientId)) { $connectParams.ClientId = $ClientId }
+  if ($ParentWindowHandle -and $ParentWindowHandle.Value -ne [IntPtr]::Zero) {
+    $connectParams.ParentWindowHandle = $ParentWindowHandle.Value
+  }
   if (-not [string]::IsNullOrWhiteSpace($TenantId)) { $connectParams.TenantId = $TenantId }
   Connect-MgGraph @connectParams | Out-Null
   $ctx = Get-MgContext
@@ -2844,6 +2850,14 @@ if ($btnAzureSignIn) {
       Update-AzureStatusLabel
       $window.Cursor = 'Wait'
       $connectArgs = @{ Scopes = @('DeviceManagementManagedDevices.Read.All','Device.Read.All','DeviceLocalCredential.Read.All') }
+      try {
+        $handle = [System.Windows.Interop.WindowInteropHelper]::new($window).Handle
+        if ($handle -and $handle -ne [IntPtr]::Zero) {
+          $connectArgs.ParentWindowHandle = $handle
+        }
+      } catch {
+        # Ignore handle resolution failures; Connect-MgGraph will fallback to its default behavior.
+      }
       if ($clientId) { $connectArgs.ClientId = $clientId }
       if ($tenantId) { $connectArgs.TenantId = $tenantId }
       $ctx = Connect-IntuneGraph @connectArgs
@@ -3256,4 +3270,3 @@ $window.Add_KeyDown({
 })
 
 [void]$window.ShowDialog()
-

@@ -118,6 +118,13 @@ If you prefer to control the service principal that is authorised in your tenant
 - `Connect-MgGraph` is executed with `-ContextScope Process`: users must authenticate at each launch; tokens are **not persisted** to disk.
 - Only Windows devices with **Intune Windows LAPS** configured will return credentials; Azure AD-only devices without Intune cannot be queried.
 
+### Packaging note (ps2exe / GUI-only builds)
+- `Connect-MgGraph` relies on an interactive browser or device-code prompt, which is surfaced via the console or a valid window handle. When compiled with `ps2exe -noConsole`, these prompts can be suppressed, making Graph sign-in appear to hang or silently fail.
+- Recommended options for GUI-only builds:
+  - Use a custom device-code flow and display the code in the WPF UI (so no console is required).
+  - Inject a parent window handle for interactive auth if you implement a dedicated authentication dialog.
+  - Keep a Debug build with console enabled for troubleshooting, and a Release build that uses a GUI-safe auth path.
+
 ---
 
 ## Security
