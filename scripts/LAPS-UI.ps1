@@ -212,7 +212,8 @@ function Get-IntuneLapsPassword {
 
   Ensure-LapsGraphModule
 
-  $uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$DeviceId/windowsLapsManagedDeviceInformation"
+  $encodedDeviceId = [Uri]::EscapeDataString($DeviceId)
+  $uri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$encodedDeviceId/windowsLapsManagedDeviceInformation"
   $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
 
   $expiration = $null
