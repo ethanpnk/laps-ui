@@ -230,6 +230,24 @@ function Invoke-GraphRequestWithFallback {
   return $null
 }
 
+function New-GraphUri {
+  param(
+    [Parameter(Mandatory)]
+    [string]$BasePath,
+    [Parameter()]
+    [hashtable]$Query
+  )
+
+  $qs = if ($Query) {
+    ($Query.GetEnumerator() | ForEach-Object {
+      "{0}={1}" -f [Uri]::EscapeDataString($_.Key), [Uri]::EscapeDataString([string]$_.Value)
+    }) -join "&"
+  } else { "" }
+
+  if ($qs) { return "$BasePath`?$qs" }
+  return $BasePath
+}
+
 function Resolve-EntraDeviceObjectId {
   [CmdletBinding()]
   param(
@@ -362,8 +380,8 @@ function Get-IntuneLapsPassword {
   )
   if ($encodedEntraObjectId -and $entraObjectId -match '^[0-9a-fA-F-]{36}$') {
     $requests += @(
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$entraObjectId?`$select=credentials,deviceName" }
-      @{ Method = 'GET'; Uri = "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$entraObjectId?`$select=credentials,deviceName" }
+      @{ Method = 'GET'; Uri = (New-GraphUri -BasePath "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$entraObjectId" -Query @{ '$select' = 'credentials,deviceName' }) }
+      @{ Method = 'GET'; Uri = (New-GraphUri -BasePath "https://graph.microsoft.com/beta/directory/deviceLocalCredentials/$entraObjectId" -Query @{ '$select' = 'credentials,deviceName' }) }
     )
   }
   $resp = Invoke-GraphRequestWithFallback -Requests $requests
