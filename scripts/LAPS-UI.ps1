@@ -81,7 +81,7 @@ function Connect-IntuneGraph {
   [CmdletBinding()]
   param(
     [Parameter()]
-    [string[]]$Scopes = @('DeviceManagementManagedDevices.Read.All'),
+    [string[]]$Scopes = @('DeviceManagementManagedDevices.Read.All','Device.Read.All','DeviceLocalCredential.Read.All'),
 
     [Parameter()]
     [string]$ClientId,
@@ -114,8 +114,12 @@ function Resolve-GraphErrorMessage {
   )
 
   $exception = $ErrorRecord
+  $errorDetailsMessage = $null
   if ($ErrorRecord -is [System.Management.Automation.ErrorRecord]) {
     $exception = $ErrorRecord.Exception
+    if ($ErrorRecord.ErrorDetails -and -not [string]::IsNullOrWhiteSpace($ErrorRecord.ErrorDetails.Message)) {
+      $errorDetailsMessage = $ErrorRecord.ErrorDetails.Message
+    }
   }
 
   if (-not ($exception -is [System.Exception])) {
@@ -124,6 +128,9 @@ function Resolve-GraphErrorMessage {
 
   $t = if ($script:t) { $script:t } else { @{} }
   $message = $exception.Message
+  if ($errorDetailsMessage) {
+    $message = "$message`n$errorDetailsMessage"
+  }
   switch ($message) {
     'GraphModuleMissing'        {
       if ($t.ContainsKey('msgAzureInstallModule')) { return $t.msgAzureInstallModule }
@@ -2602,7 +2609,7 @@ if ($btnAzureSignIn) {
       if ($script:AzureState) { $script:AzureState.IsConnecting = $true }
       Update-AzureStatusLabel
       $window.Cursor = 'Wait'
-      $connectArgs = @{ Scopes = @('DeviceManagementManagedDevices.Read.All') }
+      $connectArgs = @{ Scopes = @('DeviceManagementManagedDevices.Read.All','Device.Read.All','DeviceLocalCredential.Read.All') }
       if ($clientId) { $connectArgs.ClientId = $clientId }
       if ($tenantId) { $connectArgs.TenantId = $tenantId }
       $ctx = Connect-IntuneGraph @connectArgs
